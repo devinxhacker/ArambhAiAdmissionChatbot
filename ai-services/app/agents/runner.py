@@ -42,14 +42,19 @@ async def _resolve_query(user_message: str, history: list[dict]) -> str:
 
     # Detect if the message needs resolution (pronouns, references, bare names, short follow-ups)
     needs_resolution = (
-        len(lowered.split()) <= 4  # very short messages often need context
+        len(lowered.split()) <= 6  # short messages often need context
         or any(w in lowered for w in (
             "this college", "that college", "this university", "the same",
             "its ", "their ", "it's ", "above", "previous",
             "this institute", "that institute", "the college",
             "this person", "that person", "them", "him", "her",
+            "his ", "he ", "she ", "they ",
             "tell me more", "more about", "what about",
+            "the same", "same one", "that one", "this one",
+            "also", "and what", "how about",
         ))
+        or any(w in lowered for w in ("who", "what", "when", "where", "how", "which"))
+        and len(lowered.split()) <= 8
     )
     if not needs_resolution:
         return user_message
@@ -60,11 +65,15 @@ async def _resolve_query(user_message: str, history: list[dict]) -> str:
     prompt = (
         f"Conversation so far:\n{ctx}\n\n"
         f"User's new message: \"{user_message}\"\n\n"
-        "Task: Rewrite the user's message as a STANDALONE search query. Replace ALL "
-        "pronouns, references ('this college', 'that person', 'it', 'them', 'the same') "
-        "with the actual names from the conversation. If the user typed just a name, "
-        "turn it into a question like 'Who is [name]?' or 'Tell me about [name]'.\n\n"
-        "Output ONLY the rewritten query. No explanation."
+        "Task: Rewrite the user's message as a STANDALONE web search query that would "
+        "find the answer. Replace ALL pronouns (his, her, it, them, this, that, he, she) "
+        "and references ('this college', 'that person', 'the same') with the ACTUAL "
+        "entity names from the conversation history.\n\n"
+        "Examples:\n"
+        "- History mentions 'Amar More', user says 'Tell me his DOB' → 'Amar More date of birth'\n"
+        "- History mentions 'MITAOE', user says 'What about placements?' → 'MITAOE placements statistics'\n"
+        "- History mentions 'COEP Pune', user says 'fees?' → 'COEP Pune fees structure'\n\n"
+        "Output ONLY the rewritten search query. No explanation. No quotes."
     )
     try:
         resolved = await chat(
@@ -148,7 +157,7 @@ async def run_streaming(
         # Always attempt web search in parallel — we'll merge results
         from ..rag.web_search import live_web_chunks
         try:
-            chunks = await live_web_chunks(state["working_query"], k=3)
+            chunks = await live_web_chunks(state["working_query"], k=s.live_search_top_k)
             return chunks or []
         except Exception as exc:
             log.info("parallel_web_failed", error=str(exc)[:80])
@@ -168,9 +177,11 @@ async def run_streaming(
     all_chunks = list(local_chunks) + web_chunks
     if all_chunks:
         try:
-            merged = rerank(state["working_query"], all_chunks, top_k=s.rerank_top_k)
+            # Use higher top_k to preserve more diverse sources for citations
+            effective_top_k = max(s.rerank_top_k, min(len(all_chunks), 12))
+            merged = rerank(state["working_query"], all_chunks, top_k=effective_top_k)
         except Exception:
-            merged = all_chunks[:s.rerank_top_k]
+            merged = all_chunks[:12]
     else:
         merged = []
 

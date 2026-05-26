@@ -176,20 +176,60 @@ export default function ChatMessage({ message }) {
 
         {/* Sources */}
         {message.sources && message.sources.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-1.5 px-1">
-            {message.sources.map((src, i) => (
-              <a
-                key={i}
-                href={src.source_url || src.url || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-full px-2.5 py-0.5 transition-colors max-w-[200px]"
-                title={src.title || src.source || 'Source'}
-              >
-                <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                <span className="truncate">{src.title || src.source || `Source ${i + 1}`}</span>
-              </a>
-            ))}
+          <div className="mt-2 px-1">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                Sources ({message.sources.length})
+              </p>
+              <div className="space-y-1.5">
+                {message.sources.map((src, i) => {
+                  const url = src.source_url || src.url || src.host || ''
+                  const title = src.title || src.source || (url ? new URL(url).hostname : `Source ${i + 1}`)
+                  const snippet = src.snippet || ''
+                  const sourceType = src.source_type || (url.includes('.pdf') ? 'pdf' : 'web')
+                  const typeColors = {
+                    web: 'bg-blue-100 text-blue-700',
+                    pdf: 'bg-red-100 text-red-700',
+                    indexed: 'bg-emerald-100 text-emerald-700',
+                    upload: 'bg-purple-100 text-purple-700',
+                    html: 'bg-orange-100 text-orange-700',
+                    web_crawl: 'bg-teal-100 text-teal-700',
+                  }
+                  return (
+                    <a
+                      key={i}
+                      href={url || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-2 p-2 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 transition-all group"
+                    >
+                      <span className="flex items-center justify-center h-5 w-5 rounded bg-indigo-100 text-indigo-600 text-[10px] font-bold shrink-0 mt-0.5">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
+                            {title}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${typeColors[sourceType] || typeColors.web}`}>
+                            {sourceType}
+                          </span>
+                        </div>
+                        {snippet && (
+                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{snippet}</p>
+                        )}
+                        {url && (
+                          <p className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1">
+                            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                            {url.replace(/^https?:\/\//, '').slice(0, 60)}
+                          </p>
+                        )}
+                      </div>
+                    </a>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         )}
 

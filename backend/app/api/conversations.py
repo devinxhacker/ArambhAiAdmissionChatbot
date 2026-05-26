@@ -83,6 +83,20 @@ async def ask(
     # persist user msg up-front
     await repo.add_message(conversation_id=conv_id, role="user", content=body.message, language=body.language)
 
+    # Auto-rename conversation based on first user message
+    if conv.get("title") in ("New chat", None, ""):
+        # Generate a short title from the user's first message
+        title = body.message.strip()[:60]
+        # Clean up: remove trailing punctuation fragments
+        if len(title) < len(body.message.strip()):
+            # Truncated — find last space to avoid cutting mid-word
+            last_space = title.rfind(' ')
+            if last_space > 20:
+                title = title[:last_space] + "..."
+            else:
+                title = title + "..."
+        await repo.update_title(conv_id, title)
+
     history = await repo.list_messages(conv_id)
     history_payload = [{"role": m["role"], "content": m["content"]} for m in history]
 

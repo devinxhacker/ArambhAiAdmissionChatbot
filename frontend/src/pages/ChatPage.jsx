@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Plus, MessageSquare, BarChart3, GraduationCap, ChevronLeft, ChevronRight,
-  Sparkles,
+  Sparkles, Trash2,
 } from 'lucide-react'
 import ChatWindow from '@/components/chat/ChatWindow'
 import { useChatStore } from '@/store/chatStore'
@@ -25,7 +25,7 @@ const SUGGESTED = [
 
 // ─── Chat sidebar ─────────────────────────────────────────────────────────────
 function ChatSidebar({ collapsed, onToggle }) {
-  const { sessions, createSession, loadSessions } = useChatStore()
+  const { sessions, createSession, loadSessions, deleteSession } = useChatStore()
   const { user } = useAuthStore()
   const navigate = useNavigate()
   const { sessionId } = useParams()
@@ -35,6 +35,15 @@ function ChatSidebar({ collapsed, onToggle }) {
   const handleNew = async () => {
     const id = await createSession()
     if (id) navigate(`/chat/${id}`)
+  }
+
+  const handleDelete = async (e, sid) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await deleteSession(sid)
+    if (sessionId === sid) {
+      navigate('/chat', { replace: true })
+    }
   }
 
   const sidebarLinks = [
@@ -109,13 +118,20 @@ function ChatSidebar({ collapsed, onToggle }) {
             {sessions.map(session => (
               <Link key={session._id} to={`/chat/${session._id}`}>
                 <div className={cn(
-                  'flex items-center gap-2 px-2 py-2 rounded-xl text-xs cursor-pointer transition-colors',
+                  'flex items-center gap-2 px-2 py-2 rounded-xl text-xs cursor-pointer transition-colors group',
                   sessionId === session._id
                     ? 'bg-indigo-500/10 text-indigo-600 font-medium'
                     : 'text-muted-foreground hover:bg-white/70 hover:text-foreground'
                 )}>
                   <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{session.title || 'New conversation'}</span>
+                  <span className="truncate flex-1">{session.title || 'New chat'}</span>
+                  <button
+                    onClick={(e) => handleDelete(e, session._id)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all shrink-0"
+                    title="Delete chat"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
                 </div>
               </Link>
             ))}

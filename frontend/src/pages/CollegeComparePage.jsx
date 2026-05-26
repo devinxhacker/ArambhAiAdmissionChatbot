@@ -1,186 +1,361 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, X, BarChart3, Search, Sparkles } from 'lucide-react'
+import { Plus, X, Sparkles, Send, Loader2, Bot, RotateCcw, Globe } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useToast } from '@/hooks/useToast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts'
-
-const MAX = 4
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export default function CollegeComparePage() {
-  const [selected, setSelected] = useState([])
-  const [compared, setCompared] = useState([])
-  const [search, setSearch] = useState('')
-  const [results, setResults] = useState([])
-  const [searching, setSearching] = useState(false)
-  const [comparing, setComparing] = useState(false)
+  const [colleges, setColleges] = useState(['', ''])
+  const [aspects, setAspects] = useState('')
+  const [result, setResult] = useState('')
+  const [sources, setSources] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [streaming, setStreaming] = useState(false)
+  const resultRef = useRef(null)
   const { toast } = useToast()
 
-  const handleSearch = async (e) => {
-    e.preventDefault()
-    if (!search.trim()) return
-    setSearching(true)
-    try {
-      const res = await api.get('/api/colleges', { params: { search, limit: 6 } })
-      setResults(res.data.colleges)
-    } catch { }
-    setSearching(false)
+  const updateCollege = (index, value) => {
+    setColleges(prev => prev.map((c, i) => i === index ? value : c))
   }
 
-  const addCollege = (college) => {
-    if (selected.length >= MAX) { toast({ title: `Max ${MAX} colleges`, variant: 'destructive' }); return }
-    if (selected.find(c => c._id === college._id)) return
-    setSelected(s => [...s, college])
-    setResults([])
-    setSearch('')
+  const addCollege = () => {
+    if (colleges.length >= 4) {
+      toast({ title: 'Max 4 colleges', variant: 'destructive' })
+      return
+    }
+    setColleges(prev => [...prev, ''])
   }
 
-  const removeCollege = (id) => setSelected(s => s.filter(c => c._id !== id))
+  const removeCollege = (index) => {
+    if (colleges.length <= 2) return
+    setColleges(prev => prev.filter((_, i) => i !== index))
+  }
 
   const handleCompare = async () => {
-    if (selected.length < 2) { toast({ title: 'Select at least 2 colleges', variant: 'destructive' }); return }
-    setComparing(true)
+    const filled = colleges.filter(c => c.trim())
+    if (filled.length < 2) {
+      toast({ title: 'Enter at least 2 college names', variant: 'destructive' })
+      return
+    }
+
+    setLoading(true)
+    setStreaming(true)
+    setResult('')
+    setSources([])
+
+    const collegeList = filled.join(', ')
+    const aspectText = aspects.trim()
+      ? `Focus on these aspects: ${aspects.trim()}.`
+      : 'Compare on: ranking, fees, placements (avg & highest package), courses offered, campus facilities, hostel, accreditation, admission process, cutoffs, and scholarships.'
+
+    const message = `Give me a detailed comparison table between ${collegeList}. ${aspectText} Present the data in a well-formatted markdown table with actual specific numbers/data (not generic statements). After the table, provide a brief summary highlighting key differences and which college might be better for different student profiles. Include specific data like exact fees, placement statistics, NIRF ranking numbers, cutoff percentiles where available.`
+
+    // Use the same streaming chat endpoint as the main chatbot
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+
+    // First create a conversation for this comparison
+    let convId
     try {
-      const ids = selected.map(c => c._id).join(',')
-      const res = await api.get('/api/colleges/compare', { params: { ids } })
-      setCompared(res.data)
-    } catch { }
-    setComparing(false)
+      const convRes = await api.post('/api/conversations')
+      convId = convRes.data.id
+    } catch {
+      toast({ title: 'Failed to start comparison', variant: 'destructive' })
+      setLoading(false)
+      setStreaming(false)
+      return
+    }
+
+    const token = api.defaults.headers.common['Authorization']
+
+    try {
+      const resp = await fetch(`${baseUrl}/api/conversations/${convId}/ask`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/x-ndjson',
+          ...(token ? { Authorization: token } : {}),
+        },
+        body: JSON.stringify({
+          message,
+          language: 'en',
+          stream: true,
+          web_search: true,
+        }),
+      })
+
+      if (!resp.ok) {
+        throw new Error(`Backend ${resp.status}`)
+      }
+
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      let accumulated = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+
+        let nl = buf.indexOf('\n')
+        while (nl >= 0) {
+          const line = buf.slice(0, nl).trim()
+          buf = buf.slice(nl + 1)
+          if (line) {
+            try {
+              const parsed = JSON.parse(line)
+              if (parsed.type === 'token') {
+                accumulated += parsed.text || ''
+                setResult(accumulated)
+              } else if (parsed.type === 'translation') {
+                accumulated = parsed.text || accumulated
+                setResult(accumulated)
+              } else if (parsed.type === 'citations') {
+                setSources(parsed.citations || [])
+              } else if (parsed.type === 'web_search_result') {
+                // web search happened — sources will come via citations event
+              }
+            } catch { /* skip */ }
+          }
+          nl = buf.indexOf('\n')
+        }
+      }
+
+      if (!accumulated) {
+        setResult('No comparison data could be generated. Please try with different college names.')
+      }
+    } catch (err) {
+      toast({ title: 'Comparison failed', description: err.message, variant: 'destructive' })
+      setResult('')
+    }
+
+    setLoading(false)
+    setStreaming(false)
   }
 
-  // Build radar data from compared colleges
-  const radarData = compared.length > 0 ? [
-    { subject: 'Ranking', ...Object.fromEntries(compared.map(c => [c.name?.slice(0, 10), c.ranking ? Math.max(0, 100 - c.ranking) : 0])) },
-    { subject: 'Courses', ...Object.fromEntries(compared.map(c => [c.name?.slice(0, 10), Math.min(100, (c.courses?.length || 0) * 5)])) },
-    { subject: 'Facilities', ...Object.fromEntries(compared.map(c => [c.name?.slice(0, 10), Math.min(100, (c.facilities?.length || 0) * 10)])) },
-    { subject: 'Placement', ...Object.fromEntries(compared.map(c => [c.name?.slice(0, 10), c.placements?.[0]?.placementRate || 0])) },
-  ] : []
+  // Auto-scroll as content streams in
+  useEffect(() => {
+    if (resultRef.current && streaming) {
+      resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [result, streaming])
 
-  const COLORS = ['hsl(var(--primary))', '#3b82f6', '#10b981', '#f59e0b']
+  const SUGGESTIONS = [
+    ['MITAOE vs COEP', 'MIT Academy of Engineering', 'College of Engineering Pune'],
+    ['IIT Bombay vs IIT Delhi', 'IIT Bombay', 'IIT Delhi'],
+    ['VIT vs SRM', 'VIT Vellore', 'SRM Chennai'],
+  ]
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
+    <div className="max-w-5xl mx-auto px-4 py-12">
+      {/* Header */}
       <div className="mb-8">
         <div className="inline-flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full mb-4">
-          <Sparkles className="h-3.5 w-3.5" /> Comparison Workspace
+          <Sparkles className="h-3.5 w-3.5" /> AI-Powered Comparison
         </div>
-        <h1 className="text-3xl md:text-4xl font-semibold mb-2">Compare colleges with clarity</h1>
-        <p className="text-muted-foreground">Select up to {MAX} colleges to compare side-by-side.</p>
+        <h1 className="text-3xl md:text-4xl font-semibold mb-2">Compare colleges intelligently</h1>
+        <p className="text-muted-foreground">Enter college names and our AI will research and generate a detailed comparison using web data and our knowledge base.</p>
       </div>
 
-      {/* Search */}
+      {/* Input Card */}
       <Card className="mb-6 glass-panel">
-        <CardContent className="p-5 space-y-4">
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search college to add..." className="pl-9" />
-            </div>
-            <Button type="submit" disabled={searching}>Search</Button>
-          </form>
-
-          {results.length > 0 && (
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
-              {results.map(c => (
-                <button key={c._id} onClick={() => addCollege(c)} className="flex items-center gap-2 p-2 rounded-xl border border-white/70 bg-white/70 hover:border-indigo-300 hover:bg-white text-left transition-colors">
-                  <Avatar className="h-8 w-8 rounded-lg shrink-0">
-                    <AvatarImage src={c.logo} />
-                    <AvatarFallback className="rounded-lg text-xs">{c.name?.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">{c.address?.city}</p>
-                  </div>
-                  <Plus className="h-4 w-4 text-primary ml-auto shrink-0" />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Selected */}
-          {selected.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {selected.map(c => (
-                <Badge key={c._id} variant="secondary" className="gap-1 pr-1 bg-white/70 border border-white/70">
-                  {c.name?.slice(0, 20)}
-                  <button onClick={() => removeCollege(c._id)} className="ml-1 hover:text-destructive"><X className="h-3 w-3" /></button>
-                </Badge>
-              ))}
-              <Button size="sm" onClick={handleCompare} disabled={comparing || selected.length < 2}>
-                <BarChart3 className="h-4 w-4 mr-1" /> Compare
+        <CardContent className="p-6 space-y-5">
+          {/* College name inputs */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium">Colleges to compare</label>
+            {colleges.map((college, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <div className="flex items-center justify-center h-7 w-7 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold shrink-0">
+                  {i + 1}
+                </div>
+                <Input
+                  value={college}
+                  onChange={(e) => updateCollege(i, e.target.value)}
+                  placeholder={`College ${i + 1} name (e.g. ${i === 0 ? 'MITAOE Pune' : i === 1 ? 'COEP Pune' : 'VIT Vellore'})`}
+                  className="flex-1"
+                />
+                {colleges.length > 2 && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeCollege(i)}>
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                )}
+              </div>
+            ))}
+            {colleges.length < 4 && (
+              <Button variant="outline" size="sm" onClick={addCollege} className="ml-9">
+                <Plus className="h-4 w-4 mr-1" /> Add college
               </Button>
+            )}
+          </div>
+
+          {/* Aspects input */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Focus areas <span className="text-muted-foreground font-normal">(optional)</span></label>
+            <Input
+              value={aspects}
+              onChange={(e) => setAspects(e.target.value)}
+              placeholder="e.g. fees, placements, hostel, cutoffs, campus life..."
+              className="ml-9"
+            />
+            <p className="text-xs text-muted-foreground ml-9">Leave empty for a comprehensive comparison across all parameters.</p>
+          </div>
+
+          {/* Compare button */}
+          <div className="flex items-center gap-3 ml-9">
+            <Button
+              variant="glow"
+              onClick={handleCompare}
+              disabled={loading || colleges.filter(c => c.trim()).length < 2}
+              className="px-6"
+            >
+              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              {loading ? 'Researching...' : 'Compare with AI'}
+            </Button>
+            {result && (
+              <Button variant="outline" size="sm" onClick={() => { setResult(''); setSources([]); setColleges(['', '']); setAspects('') }}>
+                <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset
+              </Button>
+            )}
+          </div>
+
+          {/* Quick suggestions */}
+          {!result && !loading && (
+            <div className="ml-9">
+              <p className="text-xs text-muted-foreground mb-2">Quick comparisons:</p>
+              <div className="flex flex-wrap gap-2">
+                {SUGGESTIONS.map(([label, c1, c2]) => (
+                  <button
+                    key={label}
+                    onClick={() => { setColleges([c1, c2]); }}
+                    className="text-xs border bg-white rounded-full px-3 py-1 hover:bg-slate-50 hover:border-indigo-300 transition-colors"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Comparison table */}
-      {compared.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          {/* Radar chart */}
+      {/* Result */}
+      {(result || loading) && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="glass-panel">
-            <CardHeader><CardTitle className="text-base">Visual Comparison</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <RadarChart data={radarData}>
-                  <PolarGrid stroke="hsl(var(--border))" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12 }} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }} />
-                  {compared.map((c, i) => (
-                    <Radar key={c._id} name={c.name?.slice(0, 15)} dataKey={c.name?.slice(0, 10)} stroke={COLORS[i]} fill={COLORS[i]} fillOpacity={0.15} />
-                  ))}
-                </RadarChart>
-              </ResponsiveContainer>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+                  <Bot className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">AI Comparison Result</CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {streaming ? 'Researching and generating comparison...' : 'Based on web search and knowledge base data'}
+                  </p>
+                </div>
+                {streaming && <Loader2 className="h-4 w-4 animate-spin text-indigo-500 ml-auto" />}
+              </div>
+            </CardHeader>
+            <CardContent ref={resultRef}>
+              {result ? (
+                <div className="comparison-result">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      table({ children }) {
+                        return (
+                          <div className="my-4 overflow-x-auto rounded-lg border border-slate-200">
+                            <table className="w-full text-sm border-collapse">{children}</table>
+                          </div>
+                        )
+                      },
+                      thead({ children }) {
+                        return <thead className="bg-indigo-50 border-b border-slate-200">{children}</thead>
+                      },
+                      th({ children }) {
+                        return <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-700 whitespace-nowrap">{children}</th>
+                      },
+                      td({ children }) {
+                        return <td className="px-4 py-2.5 text-sm text-slate-600 border-t border-slate-100">{children}</td>
+                      },
+                      tr({ children }) {
+                        return <tr className="hover:bg-slate-50/50 transition-colors">{children}</tr>
+                      },
+                      h1({ children }) { return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1> },
+                      h2({ children }) { return <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2> },
+                      h3({ children }) { return <h3 className="text-sm font-bold mt-2.5 mb-1">{children}</h3> },
+                      p({ children }) { return <p className="mb-2 last:mb-0 leading-relaxed text-sm">{children}</p> },
+                      ul({ children }) { return <ul className="list-disc ml-4 mb-2 space-y-1 text-sm">{children}</ul> },
+                      ol({ children }) { return <ol className="list-decimal ml-4 mb-2 space-y-1 text-sm">{children}</ol> },
+                      strong({ children }) { return <strong className="font-semibold text-slate-900">{children}</strong> },
+                      blockquote({ children }) {
+                        return <blockquote className="border-l-3 border-indigo-400 bg-indigo-50/50 pl-3 py-1.5 my-2 rounded-r-lg text-slate-700 italic text-sm">{children}</blockquote>
+                      },
+                    }}
+                  >
+                    {result}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 py-8 justify-center text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm">Searching web and knowledge base for college data...</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Table */}
-          <Card className="glass-panel">
-            <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-white/70">
-                    <th className="text-left p-4 font-medium text-muted-foreground w-36">Parameter</th>
-                    {compared.map(c => (
-                      <th key={c._id} className="text-left p-4 font-medium">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7 rounded-lg">
-                            <AvatarImage src={c.logo} />
-                            <AvatarFallback className="rounded-lg text-xs">{c.name?.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          <span className="truncate max-w-[120px]">{c.name}</span>
+          {/* Sources */}
+          {sources.length > 0 && !streaming && (
+            <Card className="mt-4 glass-panel">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-indigo-500" />
+                  Sources ({sources.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {sources.map((src, i) => {
+                    const url = src.source_url || src.url || src.host || ''
+                    const title = src.title || src.source || (url ? (() => { try { return new URL(url).hostname } catch { return 'Source' } })() : `Source ${i + 1}`)
+                    const snippet = src.snippet || ''
+                    const sourceType = src.source_type || 'web'
+                    return (
+                      <a
+                        key={i}
+                        href={url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-white transition-all group"
+                      >
+                        <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-indigo-100 text-indigo-600 text-xs font-bold shrink-0">
+                          {i + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
+                            {title}
+                          </p>
+                          {snippet && (
+                            <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">{snippet}</p>
+                          )}
+                          {url && (
+                            <p className="text-[10px] text-slate-400 truncate mt-1">{url.replace(/^https?:\/\//, '').slice(0, 50)}</p>
+                          )}
                         </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { label: 'Type', key: c => c.type || '—' },
-                    { label: 'Ranking', key: c => c.ranking ? `#${c.ranking}` : '—' },
-                    { label: 'Accreditation', key: c => c.accreditation || '—' },
-                    { label: 'Location', key: c => c.address?.city ? `${c.address.city}, ${c.address.state}` : '—' },
-                    { label: 'Courses', key: c => c.courses?.length || 0 },
-                    { label: 'Hostel', key: c => c.hostelAvailable ? '✓ Yes' : '✗ No' },
-                    { label: 'Campus Size', key: c => c.campusSize || '—' },
-                    { label: 'Placement Rate', key: c => c.placements?.[0]?.placementRate ? `${c.placements[0].placementRate}%` : '—' },
-                    { label: 'Avg Package', key: c => c.placements?.[0]?.averagePackage ? `₹${(c.placements[0].averagePackage / 100000).toFixed(1)} LPA` : '—' },
-                    { label: 'Scholarships', key: c => c.scholarshipDetails ? '✓ Available' : '—' },
-                  ].map(({ label, key }) => (
-                    <tr key={label} className="border-b border-white/70 hover:bg-white/60">
-                      <td className="p-4 font-medium text-muted-foreground">{label}</td>
-                      {compared.map(c => <td key={c._id} className="p-4">{key(c)}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
+                      </a>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </motion.div>
       )}
     </div>
