@@ -1,0 +1,27 @@
+{
+  "chat": {
+    "welcome": "欢迎使用招生聊天",
+    "welcomeSubtitle": "向我询问有关招生、要求、截止日期等问题。",
+    "inputPlaceholder": "询问招生相关问题...",
+    "newChat": "新对话"
+  },
+  "auth": {
+    "login": "登录",
+    "loginDescription": "输入您的凭据以访问聊天引擎。",
+    "register": "创建账户",
+    "registerDescription": "注册以开始使用招生助手。",
+    "email": "电子邮件",
+    "password": "密码",
+    "confirmPassword": "确认密码",
+    "name": "全名",
+    "forgotPassword": "忘记密码？",
+    "noAccount": "没有账户？",
+    "hasAccount": "已有账户？"
+  },
+  "nav": {
+    "chat": "聊天",
+    "upload": "上传",
+    "admin": "管理",
+    "profile": "个人资料"
+  }
+}

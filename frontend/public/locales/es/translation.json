@@ -1,0 +1,27 @@
+{
+  "chat": {
+    "welcome": "Bienvenido al Chat de Admisión",
+    "welcomeSubtitle": "Pregúntame sobre admisiones, requisitos, plazos y más.",
+    "inputPlaceholder": "Pregunta sobre admisiones...",
+    "newChat": "Nueva conversación"
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "loginDescription": "Ingresa tus credenciales para acceder al motor de chat.",
+    "register": "Crear cuenta",
+    "registerDescription": "Regístrate para comenzar a usar el asistente de admisión.",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar contraseña",
+    "name": "Nombre completo",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "noAccount": "¿No tienes cuenta?",
+    "hasAccount": "¿Ya tienes cuenta?"
+  },
+  "nav": {
+    "chat": "Chat",
+    "upload": "Subir",
+    "admin": "Administración",
+    "profile": "Perfil"
+  }
+}
