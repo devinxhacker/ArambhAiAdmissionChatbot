@@ -42,5 +42,9 @@ datasets==3.0.2
 # Live web search
 duckduckgo-search==6.3.0
 
+# Dynamic RAG scraper
+crawl4ai==0.4.247
+requests==2.32.3
+
 pytest==8.3.3
 pytest-asyncio==0.24.0

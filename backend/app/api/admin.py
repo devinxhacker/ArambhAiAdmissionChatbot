@@ -277,3 +277,36 @@ async def analytics_summary(db: AsyncIOMotorDatabase = Depends(get_db)):
         "failed_crawls": failed,
         "top_queries": top_queries,
     }
+
+
+# -------- Dynamic RAG: Crawl URL --------
+class CrawlUrlBody(BaseModel):
+    url: str
+    entity_name: Optional[str] = None
+    college: Optional[str] = None
+    max_depth: int = 2
+    max_pages: int = 15
+
+
+@router.post("/crawl-url")
+async def crawl_url_endpoint(body: CrawlUrlBody):
+    """
+    Trigger the Dynamic RAG scraper to crawl a URL and index it into Qdrant.
+    Uses Crawl4AI for recursive BFS crawling with BS4 fallback.
+    """
+    import httpx
+
+    ai_url = f"{get_settings().ai_service_url}/ingest/crawl-url"
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            resp = await client.post(ai_url, json=body.model_dump())
+            if resp.status_code != 200:
+                detail = resp.json().get("detail", resp.text)
+                raise HTTPException(resp.status_code, detail)
+            return resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(504, "Crawl timed out — the URL may be too large or slow")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"Failed to reach AI service: {exc}")

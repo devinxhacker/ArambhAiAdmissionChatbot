@@ -1,0 +1,669 @@
+\newpage
+\addcontentsline{toc}{chapter}{Appendix 2: Project Code}
+\chapter*{Appendix 2: Project Code}
+\markboth{Appendix 2: Project Code}{}
+
+\section*{Project Structure}
+
+\begin{verbatim}
+Arambh/
+|-- frontend/                    # React 18 + Vite Frontend
+|   |-- src/
+|   |   |-- components/         # Reusable UI components
+|   |   |   |-- auth/          # Auth guards (ProtectedRoute, AdminRoute)
+|   |   |   |-- chat/          # Chat interface components
+|   |   |   |-- layout/        # Navbar, Sidebar, Footer
+|   |   |   `-- ui/            # ShadCN/Radix primitives
+|   |   |-- hooks/             # Custom React hooks
+|   |   |-- layouts/           # PublicLayout, AuthLayout, MainLayout,
+|   |   |                        DashboardLayout
+|   |   |-- lib/               # API client, i18n config
+|   |   |-- pages/             # Route pages (14 pages + admin/superadmin)
+|   |   |   |-- admin/        # Admin dashboard, uploads, FAQs, URLs
+|   |   |   `-- superadmin/   # SuperAdmin colleges, users, analytics
+|   |   |-- store/             # Zustand stores (auth, chat, college,
+|   |   |                        theme, sidebar)
+|   |   |-- App.jsx            # Main application component
+|   |   `-- index.css          # Tailwind CSS styles
+|   `-- package.json
+|
+|-- backend/                     # Python FastAPI Backend Gateway
+|   |-- app/
+|   |   |-- api/               # API route modules
+|   |   |   |-- auth.py       # JWT authentication endpoints
+|   |   |   |-- conversations.py # Chat session management
+|   |   |   |-- colleges.py   # College CRUD + search
+|   |   |   |-- admin.py      # Admin operations
+|   |   |   |-- superadmin.py # SuperAdmin management
+|   |   |   |-- recommend.py  # College recommendation
+|   |   |   `-- health.py     # Health check
+|   |   |-- core/             # Config, database, deps, logging
+|   |   |-- models/           # Pydantic schemas
+|   |   |-- repositories/     # MongoDB data access layer
+|   |   |-- services/         # Business logic (auth, AI client)
+|   |   |-- scripts/          # Seed scripts
+|   |   `-- main.py           # FastAPI application entry point
+|   `-- requirements.txt
+|
+|-- ai-services/                 # LangGraph Multi-Agent RAG Engine
+|   |-- app/
+|   |   |-- agents/           # LangGraph agent nodes
+|   |   |   |-- graph.py     # StateGraph definition
+|   |   |   |-- nodes.py     # Agent nodes (query, retrieval,
+|   |   |   |                   generation, validation)
+|   |   |   |-- runner.py    # Streaming orchestrator
+|   |   |   |-- state.py     # AgentState TypedDict
+|   |   |   |-- safety.py    # Prompt injection detection
+|   |   |   `-- recommend.py # College recommendation agent
+|   |   |-- rag/             # RAG pipeline components
+|   |   |   |-- retriever.py # Hybrid dense+BM25 retrieval
+|   |   |   |-- embeddings.py# HuggingFace embeddings
+|   |   |   |-- vectorstore.py # Qdrant operations
+|   |   |   |-- bm25_index.py# Sparse BM25 index
+|   |   |   |-- reranker.py  # Cross-encoder reranking
+|   |   |   |-- ingestion.py # Document ingestion pipeline
+|   |   |   |-- chunker.py   # Text chunking
+|   |   |   |-- cleaner.py   # HTML/PDF cleaning
+|   |   |   |-- web_search.py# Live DuckDuckGo search
+|   |   |   |-- translation.py # Language detection + translation
+|   |   |   |-- prompts.py   # All LLM prompt templates
+|   |   |   `-- llm.py       # Ollama LLM interface
+|   |   |-- api/             # FastAPI routes (agent, ingest, health)
+|   |   |-- core/            # Config, database, logging
+|   |   |-- eval/            # RAGAS evaluation scripts
+|   |   `-- main.py          # FastAPI application entry point
+|   `-- requirements.txt
+|
+|-- crawler/                     # Async Web Crawler + Celery Workers
+|   |-- app/
+|   |   |-- celery_app.py    # Celery configuration
+|   |   |-- crawler.py       # Main crawl orchestrator
+|   |   |-- fetcher.py       # HTTP fetcher (Playwright + httpx)
+|   |   |-- parser.py        # HTML/content parser
+|   |   |-- pdf_extractor.py # PDF text extraction
+|   |   |-- frontier.py      # URL frontier management
+|   |   |-- robots.py        # robots.txt compliance
+|   |   |-- sitemap.py       # Sitemap parser
+|   |   |-- url_filter.py    # URL filtering rules
+|   |   |-- ingest_client.py # AI-services ingestion client
+|   |   |-- tasks.py         # Celery task definitions
+|   |   `-- config.py        # Crawler configuration
+|   `-- requirements.txt
+|
+|-- devops/                      # Infrastructure Configuration
+|   |-- prometheus/            # Prometheus scrape config
+|   `-- grafana/               # Grafana dashboards + provisioning
+|
+|-- data/                        # Local volumes (gitignored)
+|   |-- raw/                   # Raw crawled HTML/PDF
+|   |-- processed/             # Processed documents
+|   |-- uploads/               # User uploads
+|   |-- qdrant/                # Qdrant vector storage
+|   `-- redis/                 # Redis persistence
+|
+|-- docker-compose.yml           # Full stack orchestration (8 services)
+|-- Makefile                     # Common dev commands
+|-- .env.example                 # Environment variable template
+`-- README.md                    # Project documentation
+\end{verbatim}
+
+\section*{Key Code Samples}
+
+\subsection*{1. Frontend -- App.jsx (Main Application Component)}
+
+\begin{lstlisting}[language=JavaScript, caption=App.jsx -- React Application with Role-Based Routing, basicstyle=\tiny\ttfamily]
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { useThemeStore } from '@/store/themeStore'
+import { useAuthStore } from '@/store/authStore'
+
+// Layouts
+import PublicLayout     from '@/layouts/PublicLayout'
+import AuthLayout       from '@/layouts/AuthLayout'
+import MainLayout       from '@/layouts/MainLayout'
+import DashboardLayout  from '@/layouts/DashboardLayout'
+
+// Guards
+import ProtectedRoute   from '@/components/auth/ProtectedRoute'
+import AdminRoute       from '@/components/auth/AdminRoute'
+import SuperAdminRoute  from '@/components/auth/SuperAdminRoute'
+
+// Pages
+import LandingPage       from '@/pages/LandingPage'
+import LoginPage         from '@/pages/LoginPage'
+import RegisterPage      from '@/pages/RegisterPage'
+import ChatPage          from '@/pages/ChatPage'
+import CollegesPage      from '@/pages/CollegesPage'
+import CollegeDetailPage from '@/pages/CollegeDetailPage'
+import CollegeComparePage from '@/pages/CollegeComparePage'
+import AdminDashboard    from '@/pages/admin/AdminDashboard'
+import SuperAdminDashboard from '@/pages/superadmin/SuperAdminDashboard'
+
+import { Toaster } from '@/components/ui/toaster'
+
+// Smart redirect based on user role
+function RoleRedirect() {
+  const { user } = useAuthStore()
+  if (user?.role === 'superadmin') return <Navigate to="/superadmin" replace />
+  if (user?.role === 'admin')      return <Navigate to="/admin"      replace />
+  return <Navigate to="/chat" replace />
+}
+
+export default function App() {
+  const { theme } = useThemeStore()
+  const { initAuth, isInitialising } = useAuthStore()
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.remove('light', 'dark')
+    if (theme === 'system') {
+      root.classList.add(
+        window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+      )
+    } else { root.classList.add(theme) }
+  }, [theme])
+
+  useEffect(() => { initAuth() }, [initAuth])
+
+  if (isInitialising) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <Routes>
+        {/* Public routes */}
+        <Route element={<PublicLayout />}>
+          <Route path="/"         element={<LandingPage />} />
+          <Route path="/colleges" element={<CollegesPage />} />
+          <Route path="/colleges/:slug" element={<CollegeDetailPage />} />
+          <Route path="/compare"  element={<CollegeComparePage />} />
+        </Route>
+
+        {/* Auth routes */}
+        <Route element={<AuthLayout />}>
+          <Route path="/login"    element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+        </Route>
+
+        {/* Protected user routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<RoleRedirect />} />
+          <Route element={<MainLayout />}>
+            <Route path="/chat"            element={<ChatPage />} />
+            <Route path="/chat/:sessionId" element={<ChatPage />} />
+          </Route>
+
+          {/* Admin routes */}
+          <Route element={<AdminRoute />}>
+            <Route element={<DashboardLayout />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+            </Route>
+          </Route>
+
+          {/* SuperAdmin routes */}
+          <Route element={<SuperAdminRoute />}>
+            <Route element={<DashboardLayout />}>
+              <Route path="/superadmin" element={<SuperAdminDashboard />} />
+            </Route>
+          </Route>
+        </Route>
+      </Routes>
+      <Toaster />
+    </>
+  )
+}
+\end{lstlisting}
+
+\subsection*{2. AI Services -- LangGraph Agent Nodes (Multi-Agent RAG Pipeline)}
+
+\begin{lstlisting}[language=Python, caption=agents/nodes.py -- Query Understanding and Hybrid Retrieval Nodes, basicstyle=\tiny\ttfamily]
+"""Individual MCP-style agent nodes used inside the LangGraph workflow."""
+from __future__ import annotations
+from typing import Any
+from langchain_core.messages import SystemMessage, HumanMessage
+
+from ..core.config import get_settings
+from ..rag.llm import chat
+from ..rag.prompts import INTENT_SYSTEM, SYSTEM_GROUNDED, USER_TEMPLATE
+from ..rag.retriever import retrieve_and_rerank
+from ..rag.reranker import rerank
+from ..rag.translation import detect_language, atranslate
+from .json_utils import extract_json
+from .safety import looks_like_injection, sanitize_question
+from .state import AgentState
+
+
+# --- Query Understanding Node ---
+async def query_understanding(state: AgentState) -> dict[str, Any]:
+    s = get_settings()
+    raw = sanitize_question(state.get("user_message", ""))
+
+    if looks_like_injection(raw):
+        return {
+            "errors": ["prompt_injection_blocked"],
+            "intent": "other",
+            "needs_retrieval": False,
+            "detected_language": "en",
+            "working_query": raw,
+        }
+
+    # Detect language (supports en, hi, mr)
+    requested = state.get("requested_language")
+    detected = requested or detect_language(raw)
+    if detected not in s.langs:
+        detected = "en"
+
+    # Translate to English for retrieval
+    working = await atranslate(raw, src=detected, tgt="en") \
+              if detected != "en" else raw
+
+    # LLM intent classification
+    msgs = [SystemMessage(content=INTENT_SYSTEM), HumanMessage(content=working)]
+    try:
+        resp = await chat(msgs, temperature=0.0)
+        parsed = extract_json(resp) or {}
+    except Exception:
+        parsed = {}
+
+    return {
+        "detected_language": detected,
+        "working_query": working,
+        "intent": parsed.get("intent", "other"),
+        "entities": parsed.get("entities", {}) or {},
+        "needs_retrieval": parsed.get("needs_retrieval", True),
+    }
+
+
+# --- Hybrid Retrieval Node ---
+async def retrieval(state: AgentState) -> dict[str, Any]:
+    if not state.get("needs_retrieval", True):
+        return {"reranked": [], "candidates": [], "filters": {}}
+
+    entities = state.get("entities", {}) or {}
+    filters = {
+        "college": entities.get("college"),
+        "state": entities.get("state"),
+        "year": entities.get("year"),
+    }
+    filters = {k: v for k, v in filters.items() if v}
+
+    try:
+        reranked = retrieve_and_rerank(
+            state["working_query"], filters=filters or None
+        )
+    except Exception:
+        reranked = []
+
+    return {"reranked": reranked, "filters": filters}
+\end{lstlisting}
+
+\subsection*{3. AI Services -- Streaming Runner (Parallel Retrieval + Web Search)}
+
+\begin{lstlisting}[language=Python, caption=agents/runner.py -- Streaming Orchestrator with Parallel Execution, basicstyle=\tiny\ttfamily]
+"""High-level streaming runner with parallel retrieval."""
+from __future__ import annotations
+import asyncio
+from typing import AsyncIterator
+from langchain_core.messages import SystemMessage, HumanMessage
+
+from .nodes import query_understanding, retrieval, _format_context, _top_score
+from .state import AgentState
+from ..rag.llm import chat, chat_stream
+from ..rag.prompts import SYSTEM_GROUNDED, USER_TEMPLATE, HISTORY_TEMPLATE
+from ..rag.reranker import rerank
+from ..core.config import get_settings
+
+
+async def run_streaming(
+    user_message: str,
+    history: list[dict],
+    language: str | None,
+    web_search: bool | None = None,
+) -> AsyncIterator[dict]:
+    s = get_settings()
+    state: AgentState = {
+        "user_message": user_message,
+        "history": history or [],
+        "requested_language": language,
+    }
+
+    # 1) Query understanding
+    yield {"type": "status", "step": "understanding"}
+    state.update(await query_understanding(state))
+
+    # 2) Resolve coreferences using conversation history
+    resolved_query = await _resolve_query(user_message, history)
+    state["working_query"] = resolved_query
+
+    # 3) PARALLEL: local retrieval + web search simultaneously
+    yield {"type": "status", "step": "searching"}
+
+    async def _local():
+        return await retrieval(state)
+
+    async def _web():
+        from ..rag.web_search import live_web_chunks
+        try:
+            return await live_web_chunks(state["working_query"], k=3)
+        except Exception:
+            return []
+
+    local_task = asyncio.create_task(_local())
+    web_task = asyncio.create_task(_web())
+
+    local_result = await local_task
+    state.update(local_result)
+    local_chunks = state.get("reranked", []) or []
+    web_chunks = await web_task
+
+    # 4) Merge + rerank all chunks together
+    all_chunks = list(local_chunks) + web_chunks
+    if all_chunks:
+        merged = rerank(state["working_query"], all_chunks, top_k=s.rerank_top_k)
+    else:
+        merged = []
+
+    context, citations = _format_context(merged)
+    yield {"type": "citations", "citations": citations}
+
+    # 5) Stream generation in target language
+    yield {"type": "status", "step": "generating"}
+    system_prompt = _system_prompt_for_language(
+        state.get("detected_language", "en")
+    )
+    user_prompt = USER_TEMPLATE.format(
+        history_block="", context=context, question=user_message
+    )
+    msgs = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+
+    async for token in chat_stream(msgs, temperature=s.ollama_temperature):
+        yield {"type": "token", "text": token}
+
+    confidence = min(1.0, max(0.0, _top_score(merged)))
+    yield {"type": "meta", "confidence": confidence, "web_used": len(web_chunks) > 0}
+    yield {"type": "done"}
+\end{lstlisting}
+
+\subsection*{4. AI Services -- Hybrid Retriever (Dense + BM25 Fusion)}
+
+\begin{lstlisting}[language=Python, caption=rag/retriever.py -- Hybrid Dense+Sparse Retrieval with Reranking, basicstyle=\tiny\ttfamily]
+"""Hybrid retrieval (dense + BM25) with metadata filters and reranking."""
+from __future__ import annotations
+from typing import Optional
+
+from ..core.config import get_settings
+from .embeddings import embed_query
+from .vectorstore import search as dense_search
+from .bm25_index import get_bm25
+from .reranker import rerank
+
+
+def _normalize(scores: list[float]) -> list[float]:
+    if not scores:
+        return scores
+    lo, hi = min(scores), max(scores)
+    if hi - lo < 1e-9:
+        return [1.0 for _ in scores]
+    return [(s - lo) / (hi - lo) for s in scores]
+
+
+def hybrid_retrieve(
+    query: str,
+    top_k: int | None = None,
+    filters: Optional[dict] = None,
+) -> list[dict]:
+    s = get_settings()
+    k = top_k or s.retrieval_top_k
+
+    # Dense retrieval (Qdrant)
+    qvec = embed_query(query)
+    dense = dense_search(qvec, k, filters=filters)
+
+    # Sparse retrieval (BM25)
+    sparse = get_bm25().search(query, top_k=k, filters=filters)
+
+    # Reciprocal Rank Fusion
+    by_id: dict[str, dict] = {}
+    dense_scores = _normalize([d.get("score", 0.0) for d in dense])
+    for d, ns in zip(dense, dense_scores):
+        by_id[d["id"]] = {**d, "_dense": ns}
+
+    sparse_scores = _normalize([d.get("score", 0.0) for d in sparse])
+    for d, ns in zip(sparse, sparse_scores):
+        existing = by_id.get(d["id"])
+        if existing:
+            existing["_sparse"] = ns
+        else:
+            by_id[d["id"]] = {**d, "_sparse": ns}
+
+    # Weighted fusion: alpha * dense + (1-alpha) * sparse
+    fused: list[dict] = []
+    for c in by_id.values():
+        ds = c.get("_dense", 0.0)
+        ss = c.get("_sparse", 0.0)
+        c["fused_score"] = s.hybrid_alpha * ds + (1 - s.hybrid_alpha) * ss
+        fused.append(c)
+
+    fused.sort(key=lambda x: x["fused_score"], reverse=True)
+    return fused[:k]
+
+
+def retrieve_and_rerank(query: str, filters: Optional[dict] = None) -> list[dict]:
+    s = get_settings()
+    candidates = hybrid_retrieve(query, top_k=s.retrieval_top_k, filters=filters)
+    return rerank(query, candidates, top_k=s.rerank_top_k)
+\end{lstlisting}
+
+\subsection*{5. Backend -- Conversations API (Streaming Chat with NDJSON)}
+
+\begin{lstlisting}[language=Python, caption=api/conversations.py -- Streaming Chat Endpoint, basicstyle=\tiny\ttfamily]
+import json
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from motor.motor_asyncio import AsyncIOMotorDatabase
+
+from ..core.database import get_db
+from ..core.deps import current_user
+from ..core.rate_limit import rate_limit
+from ..models.conversation import AskRequest
+from ..repositories.conversation_repo import ConversationRepo
+from ..services.ai_client import get_ai_client
+
+router = APIRouter(prefix="/api/conversations", tags=["conversations"])
+
+
+@router.post("/{conv_id}/ask")
+async def ask(
+    conv_id: str,
+    body: AskRequest,
+    user: dict = Depends(current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: None = Depends(rate_limit),
+):
+    repo = ConversationRepo(db)
+    conv = await repo.get_conversation(conv_id, user["_id"])
+    if not conv:
+        raise HTTPException(404, "conversation not found")
+
+    # Persist user message
+    await repo.add_message(
+        conversation_id=conv_id, role="user",
+        content=body.message, language=body.language
+    )
+
+    history = await repo.list_messages(conv_id)
+    history_payload = [{"role": m["role"], "content": m["content"]} for m in history]
+    ai = get_ai_client()
+
+    if not body.stream:
+        result = await ai.ask(
+            message=body.message, history=history_payload,
+            language=body.language, web_search=body.web_search,
+        )
+        await repo.add_message(
+            conversation_id=conv_id, role="assistant",
+            content=result.get("answer", ""),
+            citations=result.get("citations", []),
+            confidence=result.get("confidence"),
+        )
+        return result
+
+    # NDJSON streaming response
+    async def event_stream():
+        accumulated = ""
+        citations, confidence = [], None
+        try:
+            async for chunk in ai.ask_stream(
+                message=body.message, history=history_payload,
+                language=body.language, web_search=body.web_search,
+            ):
+                if chunk.get("type") == "token":
+                    accumulated += chunk.get("text", "")
+                elif chunk.get("type") == "citations":
+                    citations = chunk.get("citations", [])
+                elif chunk.get("type") == "meta":
+                    confidence = chunk.get("confidence")
+                yield (json.dumps(chunk) + "\n").encode("utf-8")
+        finally:
+            if accumulated:
+                await repo.add_message(
+                    conversation_id=conv_id, role="assistant",
+                    content=accumulated, citations=citations,
+                    confidence=confidence,
+                )
+
+    return StreamingResponse(
+        event_stream(), media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+\end{lstlisting}
+
+\subsection*{6. Docker Compose -- Full Stack Orchestration}
+
+\begin{lstlisting}[language=bash, caption=docker-compose.yml -- Microservices Orchestration, basicstyle=\tiny\ttfamily]
+name: arambh
+
+services:
+  # --- Infrastructure ---
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.3
+    restart: unless-stopped
+    ports: ["6333:6333", "6334:6334"]
+    volumes: ["./data/qdrant:/qdrant/storage"]
+
+  # --- Application Services ---
+  backend:
+    build: { context: ./backend, dockerfile: Dockerfile }
+    depends_on: { redis: { condition: service_healthy } }
+    ports: ["8000:8000"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  ai-services:
+    build: { context: ./ai-services, dockerfile: Dockerfile }
+    depends_on: [redis, qdrant]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["8100:8100"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8100 --reload
+
+  crawler:
+    build: { context: ./crawler, dockerfile: Dockerfile }
+    depends_on: [redis, ai-services]
+    command: celery -A app.celery_app worker -B -l info --concurrency=2
+
+  frontend:
+    build: { context: ./frontend, dockerfile: Dockerfile }
+    depends_on: [backend]
+    ports: ["5173:5173"]
+    command: npm run dev -- --host 0.0.0.0
+
+  # --- Observability ---
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3001:3000"]
+    depends_on: [prometheus]
+\end{lstlisting}
+
+
+\subsection*{7. LangGraph Workflow Definition}
+
+\begin{lstlisting}[language=Python, caption=agents/graph.py -- LangGraph StateGraph with Conditional Edges, basicstyle=\tiny\ttfamily]
+"""LangGraph multi-agent workflow definition."""
+from __future__ import annotations
+from langgraph.graph import StateGraph, END
+
+from .state import AgentState
+from .nodes import (
+    query_understanding, retrieval, live_search,
+    generation, validation, followups_node,
+)
+
+
+def build_graph():
+    g = StateGraph(AgentState)
+    g.add_node("query_understanding", query_understanding)
+    g.add_node("retrieval", retrieval)
+    g.add_node("live_search", live_search)
+    g.add_node("generation", generation)
+    g.add_node("validation", validation)
+    g.add_node("followups", followups_node)
+
+    g.set_entry_point("query_understanding")
+
+    def _should_retrieve(state: AgentState) -> str:
+        return "retrieval" if state.get("needs_retrieval", True) \
+               else "generation"
+
+    g.add_conditional_edges("query_understanding", _should_retrieve, {
+        "retrieval": "retrieval",
+        "generation": "generation",
+    })
+    g.add_edge("retrieval", "live_search")
+    g.add_edge("live_search", "generation")
+    g.add_edge("generation", "validation")
+    g.add_edge("validation", "followups")
+    g.add_edge("followups", END)
+
+    return g.compile()
+\end{lstlisting}
+
+\section*{Technology Stack}
+
+\begin{itemize}
+\item \textbf{Frontend:} React 18, Vite 5, JavaScript (JSX), Tailwind CSS 3.4, Radix UI, Zustand (state management), React Router 6, i18next (multilingual), Framer Motion, Recharts, Axios
+\item \textbf{Backend API:} Python 3.11, FastAPI 0.115, Motor (async MongoDB), JWT Authentication (RBAC -- user/admin/superadmin), Redis (rate limiting + caching), Prometheus metrics
+\item \textbf{AI Services:} LangChain 0.3, LangGraph 0.2 (multi-agent orchestration), Ollama \texttt{llama3} (local LLM), HuggingFace \texttt{BAAI/bge-small-en-v1.5} (embeddings), \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2} (reranker)
+\item \textbf{Retrieval:} Hybrid Dense (Qdrant) + Sparse (BM25) with weighted fusion, cross-encoder reranking, live DuckDuckGo web search (Perplexity-style)
+\item \textbf{Crawler:} Celery + Redis (task queue), Playwright (JS rendering), BeautifulSoup, Trafilatura, pypdf, pdfplumber
+\item \textbf{Database:} MongoDB Atlas (document store), Qdrant v1.11 (vector database), Redis 7 (cache + queue)
+\item \textbf{Observability:} Prometheus, Grafana, structlog (structured JSON logging), RAGAS evaluation framework
+\item \textbf{Orchestration:} Docker Compose (8 services), Makefile automation
+\item \textbf{Languages Supported:} English, Hindi, Marathi (direct multilingual generation)
+\end{itemize}
+
+\section*{Repository Information}
+
+\textbf{Complete source code is available at:} \\
+GitHub: \url{https://github.com/devinxhacker/ArambhAiAdmissionChatbot}
+
+\vspace{5mm}
+
+\textbf{Note:} The complete codebase includes 30+ React pages/components, a full multi-agent RAG pipeline with 6 LangGraph nodes, hybrid retrieval (dense + sparse + web), an async web crawler with Celery workers, JWT-based RBAC authentication, NDJSON streaming responses, multilingual support (en/hi/mr), and comprehensive Docker Compose orchestration. This appendix shows the core architecture and key files for reference.
+
+\vspace{10mm}
+\hrule

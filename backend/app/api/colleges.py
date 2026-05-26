@@ -174,12 +174,49 @@ async def add_website_url(
         "_id": str(ObjectId()),
         "url": body.get("url", ""),
         "label": body.get("label", ""),
+        "status": "pending",
+        "chunks_indexed": 0,
         "created_at": datetime.now(timezone.utc),
     }
     await db.colleges.update_one(
         {"_id": college["_id"]},
         {"$push": {"websiteUrls": url_doc}, "$set": {"updated_at": datetime.now(timezone.utc)}},
     )
+
+    # Trigger dynamic RAG crawl in the background
+    import httpx
+    try:
+        ai_url = "http://ai-services:8100/ingest/crawl-url"
+        async with httpx.AsyncClient(timeout=300) as client:
+            resp = await client.post(ai_url, json={
+                "url": body.get("url", ""),
+                "entity_name": body.get("label") or college.get("name", ""),
+                "college": college.get("name", ""),
+                "max_depth": 2,
+                "max_pages": 15,
+            })
+            if resp.status_code == 200:
+                result = resp.json()
+                # Update the URL entry with success status
+                await db.colleges.update_one(
+                    {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
+                    {"$set": {
+                        "websiteUrls.$.status": "completed",
+                        "websiteUrls.$.chunks_indexed": result.get("chunks_indexed", 0),
+                    }},
+                )
+            else:
+                await db.colleges.update_one(
+                    {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
+                    {"$set": {"websiteUrls.$.status": "failed"}},
+                )
+    except Exception as e:
+        # Don't fail the request — crawl happens best-effort
+        await db.colleges.update_one(
+            {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
+            {"$set": {"websiteUrls.$.status": "failed"}},
+        )
+
     updated = await db.colleges.find_one({"_id": college["_id"]})
     return updated.get("websiteUrls", [])
 
