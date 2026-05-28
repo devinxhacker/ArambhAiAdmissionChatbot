@@ -22,10 +22,14 @@ celery.conf.update(
     enable_utc=True,
 )
 
-# Default beat schedule: run scheduler every 30 minutes
+# Default beat schedule: run scheduler every 30 minutes + auto-refresh every 30 min
 celery.conf.beat_schedule = {
     "tick-every-30-min": {
         "task": "crawler.tasks.tick",
+        "schedule": crontab(minute="*/30"),
+    },
+    "auto-refresh-urls-every-30-min": {
+        "task": "crawler.tasks.auto_refresh_website_urls",
         "schedule": crontab(minute="*/30"),
     },
 }

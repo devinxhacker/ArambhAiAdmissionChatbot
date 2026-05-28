@@ -324,3 +324,260 @@ async def platform_stats(db: AsyncIOMotorDatabase = Depends(get_db)):
         "dailyQueries": daily_queries,
         "topColleges": top_colleges,
     }
+
+
+# ─── Crawl Analytics & Data Explorer ──────────────────────────────────────────
+
+@router.get("/crawl/overview")
+async def crawl_overview(db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get overall crawl statistics across all colleges."""
+    # Total documents indexed
+    total_docs = await db.documents.count_documents({})
+    total_web_crawl = await db.documents.count_documents({"source_type": "web_crawl"})
+    total_upload = await db.documents.count_documents({"source_type": {"$in": ["upload", "pdf"]}})
+    total_html = await db.documents.count_documents({"source_type": "html"})
+
+    # Total chunks
+    pipeline_chunks = [
+        {"$group": {"_id": None, "total_chunks": {"$sum": "$chunk_count"}}}
+    ]
+    chunks_result = [x async for x in db.documents.aggregate(pipeline_chunks)]
+    total_chunks = chunks_result[0]["total_chunks"] if chunks_result else 0
+
+    # Crawl jobs stats
+    total_jobs = await db.crawl_jobs.count_documents({})
+    successful_jobs = await db.crawl_jobs.count_documents({"status": "success"})
+    failed_jobs = await db.crawl_jobs.count_documents({"status": "failed"})
+    running_jobs = await db.crawl_jobs.count_documents({"status": "running"})
+
+    # Website URLs across all colleges
+    pipeline_urls = [
+        {"$unwind": "$websiteUrls"},
+        {"$group": {
+            "_id": "$websiteUrls.status",
+            "count": {"$sum": 1},
+            "total_chunks": {"$sum": "$websiteUrls.chunks_indexed"},
+            "total_pages": {"$sum": "$websiteUrls.pages_crawled"},
+        }},
+    ]
+    url_stats = [x async for x in db.colleges.aggregate(pipeline_urls)]
+    url_by_status = {s["_id"]: s for s in url_stats}
+
+    total_urls = sum(s["count"] for s in url_stats)
+    indexed_urls = url_by_status.get("completed", {}).get("count", 0)
+    pending_urls = url_by_status.get("pending", {}).get("count", 0)
+    failed_urls = url_by_status.get("failed", {}).get("count", 0)
+    scraping_urls = url_by_status.get("scraping", {}).get("count", 0)
+
+    # Recent crawl activity (last 7 days)
+    from datetime import timedelta
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    pipeline_daily = [
+        {"$match": {"updated_at": {"$gte": seven_days_ago}, "source_type": "web_crawl"}},
+        {"$group": {
+            "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$updated_at"}},
+            "docs_indexed": {"$sum": 1},
+            "chunks_created": {"$sum": "$chunk_count"},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    daily_activity = [x async for x in db.documents.aggregate(pipeline_daily)]
+
+    # Top colleges by indexed content
+    pipeline_top = [
+        {"$match": {"websiteUrls": {"$exists": True, "$ne": []}}},
+        {"$project": {
+            "name": 1,
+            "url_count": {"$size": "$websiteUrls"},
+            "total_chunks": {"$sum": "$websiteUrls.chunks_indexed"},
+            "total_pages": {"$sum": "$websiteUrls.pages_crawled"},
+        }},
+        {"$sort": {"total_chunks": -1}},
+        {"$limit": 10},
+    ]
+    top_colleges = [x async for x in db.colleges.aggregate(pipeline_top)]
+    for c in top_colleges:
+        c["_id"] = str(c["_id"])
+
+    return {
+        "documents": {
+            "total": total_docs,
+            "web_crawl": total_web_crawl,
+            "upload": total_upload,
+            "html": total_html,
+            "total_chunks": total_chunks,
+        },
+        "crawl_jobs": {
+            "total": total_jobs,
+            "successful": successful_jobs,
+            "failed": failed_jobs,
+            "running": running_jobs,
+        },
+        "website_urls": {
+            "total": total_urls,
+            "indexed": indexed_urls,
+            "pending": pending_urls,
+            "failed": failed_urls,
+            "scraping": scraping_urls,
+        },
+        "daily_activity": daily_activity,
+        "top_colleges": top_colleges,
+    }
+
+
+@router.get("/crawl/urls")
+async def crawl_urls_list(
+    status: Optional[str] = None,
+    college: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """List all website URLs across all colleges with their crawl status."""
+    pipeline = [
+        {"$match": {"websiteUrls": {"$exists": True, "$ne": []}}},
+        {"$unwind": "$websiteUrls"},
+    ]
+
+    if status:
+        pipeline.append({"$match": {"websiteUrls.status": status}})
+    if college:
+        pipeline.append({"$match": {"name": {"$regex": college, "$options": "i"}}})
+
+    pipeline.extend([
+        {"$sort": {"websiteUrls.created_at": -1}},
+        {"$skip": skip},
+        {"$limit": limit},
+        {"$project": {
+            "college_name": "$name",
+            "college_id": {"$toString": "$_id"},
+            "url": "$websiteUrls.url",
+            "label": "$websiteUrls.label",
+            "status": "$websiteUrls.status",
+            "chunks_indexed": "$websiteUrls.chunks_indexed",
+            "pages_crawled": "$websiteUrls.pages_crawled",
+            "max_depth": "$websiteUrls.max_depth",
+            "max_pages": "$websiteUrls.max_pages",
+            "auto_refresh": "$websiteUrls.auto_refresh",
+            "refresh_interval_hours": "$websiteUrls.refresh_interval_hours",
+            "last_crawled_at": "$websiteUrls.last_crawled_at",
+            "next_refresh_at": "$websiteUrls.next_refresh_at",
+            "last_refresh_result": "$websiteUrls.last_refresh_result",
+            "created_at": "$websiteUrls.created_at",
+            "url_id": "$websiteUrls._id",
+        }},
+    ])
+
+    urls = [x async for x in db.colleges.aggregate(pipeline)]
+    for u in urls:
+        u["_id"] = str(u.get("_id", ""))
+
+    # Count total
+    count_pipeline = [
+        {"$match": {"websiteUrls": {"$exists": True, "$ne": []}}},
+        {"$unwind": "$websiteUrls"},
+    ]
+    if status:
+        count_pipeline.append({"$match": {"websiteUrls.status": status}})
+    if college:
+        count_pipeline.append({"$match": {"name": {"$regex": college, "$options": "i"}}})
+    count_pipeline.append({"$count": "total"})
+    count_result = [x async for x in db.colleges.aggregate(count_pipeline)]
+    total = count_result[0]["total"] if count_result else 0
+
+    return {"urls": urls, "total": total}
+
+
+@router.get("/crawl/documents")
+async def crawl_documents_list(
+    source_type: Optional[str] = None,
+    college: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """List all indexed documents with their metadata — the data explorer."""
+    query = {}
+    if source_type:
+        query["source_type"] = source_type
+    if college:
+        query["$or"] = [
+            {"metadata.college": {"$regex": college, "$options": "i"}},
+            {"title": {"$regex": college, "$options": "i"}},
+        ]
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"source_url": {"$regex": search, "$options": "i"}},
+            {"doc_id": {"$regex": search, "$options": "i"}},
+        ]
+
+    total = await db.documents.count_documents(query)
+    cursor = db.documents.find(query).sort("updated_at", -1).skip(skip).limit(limit)
+    docs = []
+    async for d in cursor:
+        d["_id"] = str(d["_id"])
+        docs.append(d)
+
+    return {"documents": docs, "total": total}
+
+
+@router.get("/crawl/documents/{doc_id}")
+async def get_document_detail(doc_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Get detailed info about a specific document including its chunks."""
+    doc = await db.documents.find_one({"doc_id": doc_id})
+    if not doc:
+        # Try by _id
+        try:
+            doc = await db.documents.find_one({"_id": ObjectId(doc_id)})
+        except Exception:
+            pass
+    if not doc:
+        raise HTTPException(404, "document not found")
+
+    doc["_id"] = str(doc["_id"])
+    return doc
+
+
+@router.delete("/crawl/documents/{doc_id}")
+async def delete_document_by_doc_id(doc_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+    """Delete a document and its vectors from the index."""
+    import httpx
+    from ..core.config import get_settings
+
+    # Delete from Qdrant via ai-services
+    try:
+        ai_url = f"{get_settings().ai_service_url}/ingest/reindex"
+        async with httpx.AsyncClient(timeout=30) as client:
+            await client.post(ai_url, json={"doc_id": doc_id})
+    except Exception:
+        pass
+
+    # Delete from MongoDB
+    result = await db.documents.delete_one({"doc_id": doc_id})
+    if result.deleted_count == 0:
+        try:
+            result = await db.documents.delete_one({"_id": ObjectId(doc_id)})
+        except Exception:
+            pass
+
+    return {"deleted": result.deleted_count if result else 0}
+
+
+@router.get("/crawl/jobs")
+async def crawl_jobs_list(
+    status: Optional[str] = None,
+    limit: int = 30,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """List recent crawl jobs."""
+    query = {}
+    if status:
+        query["status"] = status
+    cursor = db.crawl_jobs.find(query).sort("created_at", -1).limit(limit)
+    jobs = []
+    async for j in cursor:
+        j["_id"] = str(j["_id"])
+        jobs.append(j)
+    return {"jobs": jobs}

@@ -29,28 +29,40 @@
     --brand-violet: 252 83% 62%;
     --brand-cyan: 190 92% 63%;
     --brand-pink: 330 85% 72%;
+
+    /* Glass surfaces */
+    --glass-bg: 0 0% 100% / 0.7;
+    --glass-border: 0 0% 100% / 0.6;
+    --glass-surface: 0 0% 100% / 0.8;
+    --sidebar-bg: 0 0% 100% / 0.8;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
+    --background: 224 71% 4%;
+    --foreground: 210 20% 98%;
+    --card: 224 71% 4%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 252 83% 68%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 215 28% 17%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 28% 17%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 50.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 252 83% 68%;
+
+    /* Glass surfaces — dark */
+    --glass-bg: 224 71% 6% / 0.75;
+    --glass-border: 215 28% 20% / 0.6;
+    --glass-surface: 224 71% 7% / 0.85;
+    --sidebar-bg: 224 71% 5% / 0.9;
   }
 }
 
@@ -68,6 +80,13 @@
       radial-gradient(800px 400px at 50% 120%, rgba(236, 72, 153, 0.12), transparent 60%);
     background-attachment: fixed;
   }
+  .dark body,
+  body:is(.dark *) {
+    background-image:
+      radial-gradient(1200px 600px at 10% -20%, rgba(99, 102, 241, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 90% 0%, rgba(59, 130, 246, 0.06), transparent 55%),
+      radial-gradient(800px 400px at 50% 120%, rgba(139, 92, 246, 0.06), transparent 60%);
+  }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Sora', 'Outfit', ui-sans-serif, system-ui, sans-serif;
     letter-spacing: -0.02em;
@@ -76,10 +95,19 @@
 
 @layer components {
   .glass-card {
-    @apply rounded-2xl border border-white/60 bg-white/70 shadow-soft backdrop-blur-xl;
+    @apply rounded-2xl shadow-soft backdrop-blur-xl;
+    background: hsl(var(--glass-bg));
+    border: 1px solid hsl(var(--glass-border));
   }
   .glass-panel {
-    @apply rounded-3xl border border-white/60 bg-white/60 shadow-soft backdrop-blur-2xl;
+    @apply rounded-3xl shadow-soft backdrop-blur-2xl;
+    background: hsl(var(--glass-bg));
+    border: 1px solid hsl(var(--glass-border));
+  }
+  .glass-surface {
+    background: hsl(var(--glass-surface));
+    border: 1px solid hsl(var(--glass-border));
+    @apply backdrop-blur-xl;
   }
   .gradient-text {
     background: linear-gradient(90deg, hsl(var(--brand-violet)), hsl(var(--brand-cyan)), hsl(var(--brand-pink)));
@@ -107,10 +135,156 @@
   }
 }
 
+/* ─── Dark mode overrides for hardcoded white/light backgrounds ─── */
+/* These catch all the bg-white/XX and border-white/XX patterns globally */
+.dark .bg-white\/50,
+.dark .bg-white\/60,
+.dark .bg-white\/70,
+.dark .bg-white\/80 {
+  --tw-bg-opacity: 1;
+  background-color: hsl(224 71% 7% / 0.8);
+}
+
+.dark .border-white\/60,
+.dark .border-white\/70 {
+  border-color: hsl(215 28% 18% / 0.6);
+}
+
+.dark .hover\:bg-white\/70:hover {
+  background-color: hsl(215 28% 15% / 0.7);
+}
+
+.dark .hover\:bg-white:hover {
+  background-color: hsl(224 71% 10%);
+}
+
+/* Slate backgrounds in dark mode */
+.dark .bg-slate-50 {
+  background-color: hsl(215 28% 12%);
+}
+.dark .bg-slate-100 {
+  background-color: hsl(215 28% 14%);
+}
+
+/* Slate text in dark mode */
+.dark .text-slate-600 {
+  color: hsl(215 20% 70%);
+}
+.dark .text-slate-700 {
+  color: hsl(215 20% 75%);
+}
+.dark .text-slate-800 {
+  color: hsl(215 20% 85%);
+}
+.dark .text-slate-900 {
+  color: hsl(215 20% 93%);
+}
+.dark .text-slate-500 {
+  color: hsl(215 15% 60%);
+}
+.dark .text-slate-400 {
+  color: hsl(215 15% 50%);
+}
+
+/* Slate borders in dark mode */
+.dark .border-slate-200 {
+  border-color: hsl(215 28% 18%);
+}
+.dark .border-slate-200\/80 {
+  border-color: hsl(215 28% 18% / 0.8);
+}
+.dark .border-slate-100 {
+  border-color: hsl(215 28% 15%);
+}
+
+/* Hover states */
+.dark .hover\:bg-slate-50\/50:hover {
+  background-color: hsl(215 28% 14% / 0.5);
+}
+.dark .hover\:bg-slate-50:hover {
+  background-color: hsl(215 28% 14%);
+}
+.dark .hover\:border-slate-200:hover {
+  border-color: hsl(215 28% 22%);
+}
+
+/* Indigo tints in dark mode */
+.dark .bg-indigo-50 {
+  background-color: hsl(252 50% 15% / 0.5);
+}
+.dark .bg-indigo-50\/50 {
+  background-color: hsl(252 50% 15% / 0.3);
+}
+.dark .bg-indigo-100 {
+  background-color: hsl(252 50% 18% / 0.5);
+}
+.dark .border-indigo-100 {
+  border-color: hsl(252 50% 25% / 0.4);
+}
+.dark .border-indigo-200 {
+  border-color: hsl(252 50% 30% / 0.4);
+}
+.dark .text-indigo-600 {
+  color: hsl(252 83% 72%);
+}
+.dark .text-indigo-700 {
+  color: hsl(252 83% 68%);
+}
+
+/* Emerald tints in dark mode */
+.dark .bg-emerald-50 {
+  background-color: hsl(160 50% 12% / 0.5);
+}
+.dark .text-emerald-600 {
+  color: hsl(160 70% 60%);
+}
+
+/* Red/destructive tints */
+.dark .bg-red-100 {
+  background-color: hsl(0 50% 15% / 0.5);
+}
+.dark .hover\:bg-red-100:hover {
+  background-color: hsl(0 50% 18% / 0.5);
+}
+
+/* Blue tints */
+.dark .bg-blue-100 {
+  background-color: hsl(217 50% 15% / 0.5);
+}
+
+/* Select elements and form controls */
+.dark select,
+.dark .bg-white\/70.backdrop-blur {
+  background-color: hsl(224 71% 8%) !important;
+  border-color: hsl(215 28% 18%);
+  color: hsl(210 20% 93%);
+}
+
+/* Section backgrounds */
+.dark section.bg-white\/50,
+.dark .bg-white\/50 {
+  background-color: hsl(224 71% 5% / 0.5);
+}
+
+/* Inline code */
+.dark code.bg-slate-100 {
+  background-color: hsl(215 28% 16%);
+  color: hsl(210 20% 85%);
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Dark mode background for html element */
+.dark {
+  background-color: hsl(224 71% 4%);
+  background-image:
+    radial-gradient(1200px 600px at 10% -20%, rgba(99, 102, 241, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 90% 0%, rgba(59, 130, 246, 0.06), transparent 55%),
+    radial-gradient(800px 400px at 50% 120%, rgba(139, 92, 246, 0.06), transparent 60%);
 }
 
 /* Custom scrollbar */
@@ -129,4 +303,7 @@
 
 ::selection {
   background: rgba(99, 102, 241, 0.25);
+}
+.dark ::selection {
+  background: rgba(139, 92, 246, 0.35);
 }

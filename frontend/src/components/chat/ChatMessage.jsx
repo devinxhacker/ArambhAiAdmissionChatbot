@@ -4,7 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import { Bot, User, ExternalLink, Copy, Check } from 'lucide-react'
+import { Bot, User, ExternalLink, Copy, Check, ChevronDown, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 import { useState } from 'react'
 
@@ -23,6 +23,83 @@ function CopyButton({ text }) {
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
+  )
+}
+
+function SourcesDropdown({ sources }) {
+  const [open, setOpen] = useState(false)
+
+  if (!sources || sources.length === 0) return null
+
+  const typeColors = {
+    web: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
+    pdf: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
+    indexed: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300',
+    upload: 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300',
+    html: 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300',
+    web_crawl: 'bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300',
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-gray-800/50 transition-colors"
+      >
+        <FileText className="h-3.5 w-3.5" />
+        <span>Sources ({sources.length})</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="mt-2 rounded-xl border border-border dark:border-gray-700/60 bg-muted/30 dark:bg-gray-800/40 p-3 animate-fade-in">
+          <div className="space-y-1.5">
+            {sources.map((src, i) => {
+              const url = src.source_url || src.url || src.host || ''
+              let title = src.title || src.source || `Source ${i + 1}`
+              if (!title && url) {
+                try { title = new URL(url).hostname } catch { title = `Source ${i + 1}` }
+              }
+              const snippet = src.snippet || ''
+              const sourceType = src.source_type || (url.includes('.pdf') ? 'pdf' : 'web')
+
+              return (
+                <a
+                  key={i}
+                  href={url || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-background dark:hover:bg-gray-700/50 border border-transparent hover:border-border dark:hover:border-gray-600/50 transition-all group"
+                >
+                  <span className="flex items-center justify-center h-5 w-5 rounded bg-primary/10 text-primary text-[10px] font-bold shrink-0 mt-0.5">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                        {title}
+                      </span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${typeColors[sourceType] || typeColors.web}`}>
+                        {sourceType}
+                      </span>
+                    </div>
+                    {snippet && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{snippet}</p>
+                    )}
+                    {url && (
+                      <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5 flex items-center gap-1">
+                        <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                        {url.replace(/^https?:\/\//, '').slice(0, 60)}
+                      </p>
+                    )}
+                  </div>
+                </a>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -60,7 +137,7 @@ export default function ChatMessage({ message }) {
             'rounded-2xl px-4 py-3 text-sm',
             isUser
               ? 'bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-tr-sm shadow-md'
-              : 'bg-white border border-slate-200/80 text-foreground rounded-tl-sm shadow-sm'
+              : 'bg-white dark:bg-gray-800/90 border border-slate-200/80 dark:border-gray-700/60 text-foreground rounded-tl-sm shadow-sm'
           )}
         >
           {isUser ? (
@@ -70,38 +147,28 @@ export default function ChatMessage({ message }) {
               remarkPlugins={[remarkGfm]}
               className="markdown-response"
               components={{
-                // ─── Tables ───
                 table({ children }) {
                   return (
-                    <div className="my-3 overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="w-full text-sm border-collapse">
-                        {children}
-                      </table>
+                    <div className="my-3 overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-sm border-collapse">{children}</table>
                     </div>
                   )
                 },
                 thead({ children }) {
-                  return <thead className="bg-slate-50 border-b border-slate-200">{children}</thead>
+                  return <thead className="bg-muted/50 border-b border-border">{children}</thead>
                 },
                 th({ children }) {
-                  return (
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 whitespace-nowrap">
-                      {children}
-                    </th>
-                  )
+                  return <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap">{children}</th>
                 },
                 td({ children }) {
-                  return <td className="px-3 py-2 text-sm text-slate-600 border-t border-slate-100">{children}</td>
+                  return <td className="px-3 py-2 text-sm border-t border-border/50">{children}</td>
                 },
                 tr({ children }) {
-                  return <tr className="hover:bg-slate-50/50 transition-colors">{children}</tr>
+                  return <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
                 },
-
-                // ─── Code blocks ───
                 code({ node, inline, className, children, ...props }) {
                   const match = /language-(\w+)/.exec(className || '')
                   const codeString = String(children).replace(/\n$/, '')
-
                   if (!inline && (match || codeString.includes('\n'))) {
                     return (
                       <div className="relative my-3 rounded-lg overflow-hidden">
@@ -124,49 +191,35 @@ export default function ChatMessage({ message }) {
                     )
                   }
                   return (
-                    <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>
+                    <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono" {...props}>
                       {children}
                     </code>
                   )
                 },
-
-                // ─── Headings ───
-                h1({ children }) { return <h1 className="text-lg font-bold mt-4 mb-2 text-slate-900">{children}</h1> },
-                h2({ children }) { return <h2 className="text-base font-bold mt-3 mb-1.5 text-slate-900">{children}</h2> },
-                h3({ children }) { return <h3 className="text-sm font-bold mt-2.5 mb-1 text-slate-800">{children}</h3> },
-
-                // ─── Paragraphs ───
+                h1({ children }) { return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1> },
+                h2({ children }) { return <h2 className="text-base font-bold mt-3 mb-1.5">{children}</h2> },
+                h3({ children }) { return <h3 className="text-sm font-bold mt-2.5 mb-1">{children}</h3> },
                 p({ children }) { return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p> },
-
-                // ─── Lists ───
                 ul({ children }) { return <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul> },
                 ol({ children }) { return <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol> },
                 li({ children }) { return <li className="leading-relaxed">{children}</li> },
-
-                // ─── Blockquotes ───
                 blockquote({ children }) {
                   return (
-                    <blockquote className="border-l-3 border-indigo-400 bg-indigo-50/50 pl-3 py-1.5 my-2 rounded-r-lg text-slate-700 italic">
+                    <blockquote className="border-l-3 border-primary/60 bg-primary/5 pl-3 py-1.5 my-2 rounded-r-lg italic">
                       {children}
                     </blockquote>
                   )
                 },
-
-                // ─── Links ───
                 a({ href, children }) {
                   return (
-                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 underline underline-offset-2 decoration-indigo-300">
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:text-primary/80 underline underline-offset-2 decoration-primary/40">
                       {children}
                     </a>
                   )
                 },
-
-                // ─── Bold / Italic ───
-                strong({ children }) { return <strong className="font-semibold text-slate-900">{children}</strong> },
-                em({ children }) { return <em className="italic text-slate-700">{children}</em> },
-
-                // ─── Horizontal rule ───
-                hr() { return <hr className="my-3 border-slate-200" /> },
+                strong({ children }) { return <strong className="font-semibold">{children}</strong> },
+                em({ children }) { return <em className="italic">{children}</em> },
+                hr() { return <hr className="my-3 border-border" /> },
               }}
             >
               {message.content}
@@ -174,63 +227,9 @@ export default function ChatMessage({ message }) {
           )}
         </div>
 
-        {/* Sources */}
-        {message.sources && message.sources.length > 0 && (
-          <div className="mt-2 px-1">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Sources ({message.sources.length})
-              </p>
-              <div className="space-y-1.5">
-                {message.sources.map((src, i) => {
-                  const url = src.source_url || src.url || src.host || ''
-                  const title = src.title || src.source || (url ? new URL(url).hostname : `Source ${i + 1}`)
-                  const snippet = src.snippet || ''
-                  const sourceType = src.source_type || (url.includes('.pdf') ? 'pdf' : 'web')
-                  const typeColors = {
-                    web: 'bg-blue-100 text-blue-700',
-                    pdf: 'bg-red-100 text-red-700',
-                    indexed: 'bg-emerald-100 text-emerald-700',
-                    upload: 'bg-purple-100 text-purple-700',
-                    html: 'bg-orange-100 text-orange-700',
-                    web_crawl: 'bg-teal-100 text-teal-700',
-                  }
-                  return (
-                    <a
-                      key={i}
-                      href={url || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-start gap-2 p-2 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 transition-all group"
-                    >
-                      <span className="flex items-center justify-center h-5 w-5 rounded bg-indigo-100 text-indigo-600 text-[10px] font-bold shrink-0 mt-0.5">
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
-                            {title}
-                          </span>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${typeColors[sourceType] || typeColors.web}`}>
-                            {sourceType}
-                          </span>
-                        </div>
-                        {snippet && (
-                          <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{snippet}</p>
-                        )}
-                        {url && (
-                          <p className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1">
-                            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                            {url.replace(/^https?:\/\//, '').slice(0, 60)}
-                          </p>
-                        )}
-                      </div>
-                    </a>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
+        {/* Sources — collapsible dropdown */}
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <SourcesDropdown sources={message.sources} />
         )}
 
         <span className="text-[11px] text-muted-foreground px-1">

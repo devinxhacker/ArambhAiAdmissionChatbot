@@ -284,29 +284,136 @@ class CrawlUrlBody(BaseModel):
     url: str
     entity_name: Optional[str] = None
     college: Optional[str] = None
-    max_depth: int = 2
-    max_pages: int = 15
+    max_depth: int = 10
+    max_pages: int = 200
 
 
 @router.post("/crawl-url")
 async def crawl_url_endpoint(body: CrawlUrlBody):
     """
-    Trigger the Dynamic RAG scraper to crawl a URL and index it into Qdrant.
-    Uses Crawl4AI for recursive BFS crawling with BS4 fallback.
+    Trigger the deep crawler to crawl a URL and index it into Qdrant.
+    Crawls the entire website deeply (all subpages) with per-page indexing.
     """
     import httpx
 
     ai_url = f"{get_settings().ai_service_url}/ingest/crawl-url"
     try:
-        async with httpx.AsyncClient(timeout=300) as client:
+        async with httpx.AsyncClient(timeout=600) as client:
             resp = await client.post(ai_url, json=body.model_dump())
             if resp.status_code != 200:
                 detail = resp.json().get("detail", resp.text)
                 raise HTTPException(resp.status_code, detail)
             return resp.json()
     except httpx.TimeoutException:
-        raise HTTPException(504, "Crawl timed out — the URL may be too large or slow")
+        raise HTTPException(504, "Crawl timed out — the website may be too large or slow")
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(502, f"Failed to reach AI service: {exc}")
+
+
+# -------- Auto-Refresh: Scheduled re-crawl for website URLs --------
+
+async def _run_auto_refresh(db: AsyncIOMotorDatabase) -> dict:
+    """Core auto-refresh logic shared between admin endpoint and internal scheduler."""
+    import httpx
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    refreshed = []
+    errors = []
+
+    # Find all colleges with website URLs that have auto_refresh enabled
+    async for college in db.colleges.find({"websiteUrls": {"$exists": True, "$ne": []}}):
+        for url_entry in (college.get("websiteUrls") or []):
+            if not url_entry.get("auto_refresh", False):
+                continue
+            if url_entry.get("status") == "scraping":
+                continue  # already in progress
+
+            next_refresh = url_entry.get("next_refresh_at")
+            if next_refresh and next_refresh > now:
+                continue  # not due yet
+
+            # Mark as scraping
+            await db.colleges.update_one(
+                {"_id": college["_id"], "websiteUrls._id": url_entry["_id"]},
+                {"$set": {"websiteUrls.$.status": "scraping"}},
+            )
+
+            # Trigger deep re-crawl with change detection
+            try:
+                ai_url = f"{get_settings().ai_service_url}/ingest/crawl-url"
+                async with httpx.AsyncClient(timeout=600) as client:
+                    resp = await client.post(ai_url, json={
+                        "url": url_entry["url"],
+                        "entity_name": url_entry.get("label") or college.get("name", ""),
+                        "college": college.get("name", ""),
+                        "max_depth": url_entry.get("max_depth", 10),
+                        "max_pages": url_entry.get("max_pages", 200),
+                    })
+
+                    interval = url_entry.get("refresh_interval_hours", 24)
+                    next_at = now + timedelta(hours=interval)
+
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        await db.colleges.update_one(
+                            {"_id": college["_id"], "websiteUrls._id": url_entry["_id"]},
+                            {"$set": {
+                                "websiteUrls.$.status": "completed",
+                                "websiteUrls.$.chunks_indexed": result.get("chunks_indexed", 0),
+                                "websiteUrls.$.pages_crawled": result.get("pages_crawled", 0),
+                                "websiteUrls.$.last_crawled_at": now,
+                                "websiteUrls.$.next_refresh_at": next_at,
+                                "websiteUrls.$.last_refresh_result": {
+                                    "pages_indexed": result.get("pages_indexed", 0),
+                                    "pages_updated": result.get("pages_updated", 0),
+                                    "pages_unchanged": result.get("pages_unchanged", 0),
+                                    "stale_removed": result.get("stale_pages_removed", 0),
+                                },
+                            }},
+                        )
+                        refreshed.append({
+                            "url": url_entry["url"],
+                            "college": college.get("name"),
+                            "result": result,
+                        })
+                    else:
+                        await db.colleges.update_one(
+                            {"_id": college["_id"], "websiteUrls._id": url_entry["_id"]},
+                            {"$set": {
+                                "websiteUrls.$.status": "failed",
+                                "websiteUrls.$.next_refresh_at": next_at,
+                            }},
+                        )
+                        errors.append({"url": url_entry["url"], "error": resp.text[:200]})
+            except Exception as e:
+                await db.colleges.update_one(
+                    {"_id": college["_id"], "websiteUrls._id": url_entry["_id"]},
+                    {"$set": {
+                        "websiteUrls.$.status": "failed",
+                        "websiteUrls.$.next_refresh_at": now + timedelta(hours=1),  # retry sooner
+                    }},
+                )
+                errors.append({"url": url_entry["url"], "error": str(e)[:200]})
+
+    return {
+        "refreshed": len(refreshed),
+        "errors": len(errors),
+        "details": refreshed,
+        "error_details": errors,
+    }
+
+
+@router.post("/auto-refresh")
+async def trigger_auto_refresh(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(require_role("admin", "superadmin")),
+):
+    """
+    Manually trigger auto-refresh for all due website URLs.
+    Re-crawls URLs whose next_refresh_at has passed, using change detection
+    to only update pages whose content has actually changed.
+    """
+    return await _run_auto_refresh(db)

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import {
   LayoutDashboard, Users, Building2, BarChart3, Upload,
   LogOut, ChevronLeft, ChevronRight, Bell,
-  GraduationCap, HelpCircle, Globe, Shield,
+  GraduationCap, HelpCircle, Globe, Shield, Database,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { useToast } from '@/hooks/useToast'
@@ -19,6 +19,7 @@ const superadminNav = [
   { icon: Building2,       label: 'Colleges',   href: '/superadmin/colleges' },
   { icon: Shield,          label: 'Admins',     href: '/superadmin/admins' },
   { icon: Users,           label: 'Users',      href: '/superadmin/users' },
+  { icon: Database,        label: 'Crawl Data', href: '/superadmin/crawl-data' },
   { icon: BarChart3,       label: 'Analytics',  href: '/superadmin/analytics' },
 ]
 
@@ -52,10 +53,10 @@ function DashboardSidebar({ collapsed, onToggle }) {
     <motion.aside
       animate={{ width: collapsed ? 72 : 256 }}
       transition={{ duration: 0.25, ease: 'easeInOut' }}
-      className="fixed left-0 top-0 h-full bg-white/80 border-r border-white/70 backdrop-blur-xl flex flex-col z-40 overflow-hidden"
+      className="fixed left-0 top-0 h-full bg-white/80 dark:bg-gray-950/90 border-r border-white/70 dark:border-gray-800/60 backdrop-blur-xl flex flex-col z-40 overflow-hidden"
     >
       {/* Logo */}
-      <div className="flex items-center h-16 px-4 border-b border-white/70 shrink-0">
+      <div className="flex items-center h-16 px-4 border-b border-white/70 dark:border-gray-800/60 shrink-0">
         {!collapsed && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 flex-1 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
@@ -71,7 +72,7 @@ function DashboardSidebar({ collapsed, onToggle }) {
 
       {/* Role badge */}
       {!collapsed && (
-        <div className="px-4 py-2.5 border-b border-white/70">
+        <div className="px-4 py-2.5 border-b border-white/70 dark:border-gray-800/60">
           <Badge variant={isSuperAdmin ? 'default' : 'secondary'} className="text-xs">
             <Shield className="h-3 w-3 mr-1" />
             {isSuperAdmin ? 'Super Admin' : 'Admin'}
@@ -93,7 +94,7 @@ function DashboardSidebar({ collapsed, onToggle }) {
                   collapsed && 'justify-center px-0',
                   active
                     ? 'bg-gradient-to-r from-indigo-500 to-blue-500 text-white shadow-soft'
-                    : 'text-muted-foreground hover:bg-white/70 hover:text-foreground'
+                    : 'text-muted-foreground hover:bg-white/70 dark:hover:bg-gray-800/50 hover:text-foreground'
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -105,7 +106,7 @@ function DashboardSidebar({ collapsed, onToggle }) {
       </nav>
 
       {/* User */}
-      <div className="p-3 border-t border-white/70 shrink-0">
+      <div className="p-3 border-t border-white/70 dark:border-gray-800/60 shrink-0">
         <div className={cn('flex items-center gap-2', collapsed && 'justify-center')}>
           <Link to="/profile">
             <Avatar className="h-8 w-8 shrink-0 cursor-pointer">
@@ -148,7 +149,7 @@ function DashboardTopbar() {
   const title = current?.label || 'Dashboard'
 
   return (
-    <header className="h-16 border-b border-white/70 bg-white/80 backdrop-blur-xl flex items-center justify-between px-6 shrink-0">
+    <header className="h-16 border-b border-white/70 dark:border-gray-800/60 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl flex items-center justify-between px-6 shrink-0">
       <h1 className="text-lg font-semibold">{title}</h1>
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon">
@@ -172,7 +173,7 @@ export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white/60">
+    <div className="flex h-screen overflow-hidden bg-white/60 dark:bg-gray-950/60">
       <DashboardSidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       <div
         className="flex flex-col flex-1 overflow-hidden transition-all duration-300"

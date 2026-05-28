@@ -30,7 +30,7 @@ export default function ChatInput({ onSend, disabled, sessionId }) {
   }
 
   return (
-    <div className="rounded-2xl border border-white/70 bg-white/70 backdrop-blur-xl p-2 flex items-end gap-2">
+    <div className="rounded-2xl border border-white/70 dark:border-gray-800/60 bg-white/70 dark:bg-gray-900/70 backdrop-blur-xl p-2 flex items-end gap-2">
       <div className="flex-1 relative">
         <Textarea
           ref={textareaRef}

@@ -58,10 +58,10 @@ function ChatSidebar({ collapsed, onToggle }) {
     <motion.aside
       animate={{ width: collapsed ? 64 : 260 }}
       transition={{ duration: 0.22, ease: 'easeInOut' }}
-      className="flex flex-col h-full bg-white/80 border-r border-white/70 backdrop-blur-xl overflow-hidden shrink-0"
+      className="flex flex-col h-full bg-white/80 dark:bg-gray-950/80 border-r border-white/70 dark:border-gray-800/60 backdrop-blur-xl overflow-hidden shrink-0"
     >
       {/* Header */}
-      <div className="flex items-center h-14 px-3 border-b border-white/70 shrink-0">
+      <div className="flex items-center h-14 px-3 border-b border-white/70 dark:border-gray-800/60 shrink-0">
         {!collapsed && (
           <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-bold text-sm text-primary flex-1">
             AdmissionAI
@@ -140,7 +140,7 @@ function ChatSidebar({ collapsed, onToggle }) {
       )}
 
       {/* User */}
-      <div className={cn('p-3 border-t border-white/70 shrink-0 flex items-center gap-2', collapsed && 'justify-center')}>
+      <div className={cn('p-3 border-t border-white/70 dark:border-gray-800/60 shrink-0 flex items-center gap-2', collapsed && 'justify-center')}>
         <Link to="/profile">
           <Avatar className="h-7 w-7 shrink-0">
             <AvatarFallback className="text-xs bg-primary text-primary-foreground">{initials}</AvatarFallback>
@@ -197,7 +197,7 @@ function WelcomeScreen({ onPrompt }) {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => onPrompt(prompt)}
-            className="text-left p-3 rounded-xl border border-white/70 bg-white/80 hover:border-indigo-300 hover:bg-white text-sm transition-colors"
+            className="text-left p-3 rounded-xl border border-white/70 dark:border-gray-700/60 bg-white/80 dark:bg-gray-800/60 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:bg-white dark:hover:bg-gray-800 text-sm transition-colors"
           >
             {prompt}
           </motion.button>
@@ -232,7 +232,7 @@ export default function ChatPage() {
   const showWelcome = !sessionId && messages.length === 0
 
   return (
-    <div className="flex h-full overflow-hidden bg-white/60">
+    <div className="flex h-full overflow-hidden bg-white/60 dark:bg-gray-950/60">
       <ChatSidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         {showWelcome ? (

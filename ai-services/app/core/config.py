@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dim: int = 384
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    supported_langs: str = "en,hi,mr"
+    supported_langs: str = "en,hi,mr,ur"
 
     retrieval_top_k: int = 20
     rerank_top_k: int = 6

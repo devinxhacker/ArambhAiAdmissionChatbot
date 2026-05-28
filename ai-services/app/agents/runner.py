@@ -98,6 +98,8 @@ def _system_prompt_for_language(lang: str) -> str:
         base += "\n\n**IMPORTANT: Respond entirely in Hindi (हिन्दी). Use Devanagari script. Do NOT respond in English.**"
     elif lang == "mr":
         base += "\n\n**IMPORTANT: Respond entirely in Marathi (मराठी). Use Devanagari script. Do NOT respond in English.**"
+    elif lang == "ur":
+        base += "\n\n**IMPORTANT: Respond entirely in Urdu (اردو). Use Nastaliq/Arabic script. Do NOT respond in English.**"
     return base
 
 
@@ -138,6 +140,8 @@ async def run_streaming(
             greeting = "नमस्ते! मैं आरम्भ हूँ, आपका एडमिशन असिस्टेंट। इंजीनियरिंग कॉलेजों के बारे में कुछ भी पूछें — फीस, कटऑफ, प्लेसमेंट, स्कॉलरशिप। आज मैं आपकी कैसे मदद कर सकता हूँ?"
         elif detected_lang == "mr":
             greeting = "नमस्कार! मी आरम्भ आहे, तुमचा ॲडमिशन असिस्टंट. इंजिनिअरिंग कॉलेजबद्दल काहीही विचारा — फी, कटऑफ, प्लेसमेंट, स्कॉलरशिप. आज मी तुम्हाला कशी मदत करू शकतो?"
+        elif detected_lang == "ur":
+            greeting = "السلام علیکم! میں آرمبھ ہوں، آپ کا ایڈمیشن اسسٹنٹ۔ انجینئرنگ کالجوں کے بارے میں کچھ بھی پوچھیں — فیس، کٹ آف، پلیسمنٹ، اسکالرشپ۔ آج میں آپ کی کیسے مدد کر سکتا ہوں؟"
         yield {"type": "token", "text": greeting}
         yield {"type": "meta", "confidence": 1.0, "language": detected_lang, "web_used": False}
         yield {"type": "done"}

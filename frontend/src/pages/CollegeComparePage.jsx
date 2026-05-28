@@ -156,7 +156,7 @@ export default function CollegeComparePage() {
     <div className="max-w-5xl mx-auto px-4 py-12">
       {/* Header */}
       <div className="mb-8">
-        <div className="inline-flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full mb-4">
+        <div className="inline-flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800/40 px-3 py-1 rounded-full mb-4">
           <Sparkles className="h-3.5 w-3.5" /> AI-Powered Comparison
         </div>
         <h1 className="text-3xl md:text-4xl font-semibold mb-2">Compare colleges intelligently</h1>
@@ -233,7 +233,7 @@ export default function CollegeComparePage() {
                   <button
                     key={label}
                     onClick={() => { setColleges([c1, c2]); }}
-                    className="text-xs border bg-white rounded-full px-3 py-1 hover:bg-slate-50 hover:border-indigo-300 transition-colors"
+                    className="text-xs border bg-white dark:bg-gray-800 dark:border-gray-700 rounded-full px-3 py-1 hover:bg-slate-50 dark:hover:bg-gray-700 hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-colors"
                   >
                     {label}
                   </button>

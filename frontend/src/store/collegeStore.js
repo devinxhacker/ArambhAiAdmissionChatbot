@@ -64,7 +64,14 @@ export const useCollegeStore = create((set, get) => ({
 
   addWebsiteUrl: async (data) => {
     try {
-      const res = await api.post('/api/colleges/my/urls', data)
+      const res = await api.post('/api/colleges/my/urls', {
+        url: data.url,
+        label: data.label,
+        max_depth: data.max_depth || 10,
+        max_pages: data.max_pages || 200,
+        auto_refresh: data.auto_refresh !== false,
+        refresh_interval_hours: data.refresh_interval_hours || 24,
+      })
       set(s => ({ myCollege: s.myCollege ? { ...s.myCollege, websiteUrls: res.data } : s.myCollege }))
       return { success: true }
     } catch (err) {

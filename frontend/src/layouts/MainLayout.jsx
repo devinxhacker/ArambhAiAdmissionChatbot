@@ -17,7 +17,7 @@ export default function MainLayout() {
   const isChatPage = location.pathname.startsWith('/chat')
 
   return (
-    <div className="flex flex-col h-screen bg-white/60">
+    <div className="flex flex-col h-screen bg-white/60 dark:bg-gray-950/60">
       <Header />
       <main className={`flex-1 ${isChatPage ? 'overflow-hidden' : 'overflow-y-auto'}`}>
         <Outlet />

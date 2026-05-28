@@ -18,10 +18,9 @@ import { cn } from '@/lib/utils'
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
-  { code: 'ar', label: 'العربية' },
-  { code: 'fr', label: 'Français' },
-  { code: 'es', label: 'Español' },
-  { code: 'zh', label: '中文' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'mr', label: 'मराठी' },
+  { code: 'ur', label: 'اردو' },
 ]
 
 export default function Header() {
@@ -48,7 +47,7 @@ export default function Header() {
   }
 
   return (
-    <header className="h-16 border-b border-white/70 bg-white/80 backdrop-blur-xl flex items-center justify-between px-4 shrink-0">
+    <header className="h-16 border-b border-white/70 dark:border-gray-800/60 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl flex items-center justify-between px-4 shrink-0">
       <div className="flex items-center gap-4">
         <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors">
           <Home className="h-4 w-4" /> Home

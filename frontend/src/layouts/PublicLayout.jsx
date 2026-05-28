@@ -23,7 +23,7 @@ export default function PublicLayout() {
   return (
     <div className="min-h-screen bg-background">
       {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-white/70 backdrop-blur-xl">
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/60 bg-white/70 dark:bg-gray-950/80 backdrop-blur-xl">
         <motion.div
           style={{ scaleX }}
           className="absolute bottom-0 left-0 right-0 h-[2px] origin-left bg-gradient-to-r from-indigo-500 via-blue-500 to-pink-500"
@@ -35,7 +35,7 @@ export default function PublicLayout() {
                 <GraduationCap className="h-4 w-4 text-white" />
               </div>
               <span className="font-semibold text-lg tracking-tight">AdmissionAI</span>
-              <span className="hidden sm:inline-flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+              <span className="hidden sm:inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-full">
                 <Sparkles className="h-3 w-3" /> Student OS
               </span>
             </Link>
@@ -79,7 +79,7 @@ export default function PublicLayout() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden border-t border-border bg-white/80 backdrop-blur-xl px-4 py-4 space-y-2">
+          <div className="md:hidden border-t border-border bg-white/80 dark:bg-gray-950/90 backdrop-blur-xl px-4 py-4 space-y-2">
             {[
               { label: 'Home', href: '/' },
               { label: 'Colleges', href: '/colleges' },
@@ -109,7 +109,7 @@ export default function PublicLayout() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-border/70 bg-white/70 backdrop-blur-xl mt-20">
+      <footer className="border-t border-border/70 bg-white/70 dark:bg-gray-950/70 backdrop-blur-xl mt-20">
         <div className="max-w-7xl mx-auto px-4 py-14 grid grid-cols-1 md:grid-cols-4 gap-10">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-4">

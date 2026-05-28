@@ -76,7 +76,7 @@ export default function CollegesPage() {
     <div className="max-w-7xl mx-auto px-4 py-12">
       {/* Header */}
       <div className="mb-8">
-        <div className="inline-flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full mb-4">
+        <div className="inline-flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800/40 px-3 py-1 rounded-full mb-4">
           <Sparkles className="h-3.5 w-3.5" /> Verified listings
         </div>
         <h1 className="text-3xl md:text-4xl font-semibold mb-2">Explore Colleges</h1>
@@ -93,7 +93,7 @@ export default function CollegesPage() {
           <Button type="submit">Search</Button>
         </form>
         <select
-          className="h-11 rounded-xl border border-input/70 bg-white/70 backdrop-blur px-3 text-sm"
+          className="h-11 rounded-xl border border-input/70 bg-white/70 dark:bg-gray-900/70 backdrop-blur px-3 text-sm"
           value={type}
           onChange={e => { setType(e.target.value); setPage(1) }}
         >
@@ -106,7 +106,7 @@ export default function CollegesPage() {
       {isLoading ? (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-64 rounded-2xl bg-white/70 border border-white/70 animate-pulse" />
+            <div key={i} className="h-64 rounded-2xl bg-white/70 dark:bg-gray-800/50 border border-white/70 dark:border-gray-700/50 animate-pulse" />
           ))}
         </div>
       ) : colleges.length === 0 ? (

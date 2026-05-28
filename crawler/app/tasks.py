@@ -106,3 +106,36 @@ def run_crawl(self, payload: dict):
             {"$set": {"status": "failed", "finished_at": _now(), "error": str(exc)}},
         )
         raise self.retry(exc=exc, countdown=60)
+
+
+@celery.task(name="crawler.tasks.auto_refresh_website_urls")
+def auto_refresh_website_urls():
+    """
+    Periodic task: calls the backend's internal auto-refresh endpoint which checks
+    all website URLs due for re-crawling and triggers deep crawls with
+    change detection. Only pages whose content has actually changed get re-indexed.
+
+    Runs every 30 minutes via Celery beat.
+    """
+    import httpx
+    import os
+
+    backend_url = "http://backend:8000/internal/auto-refresh"
+    token = os.getenv("INTERNAL_SCHEDULER_TOKEN", "arambh-internal-scheduler")
+    try:
+        with httpx.Client(timeout=900) as client:
+            resp = client.post(
+                backend_url,
+                headers={"X-Internal-Token": token},
+            )
+            if resp.status_code == 200:
+                result = resp.json()
+                return {
+                    "ok": True,
+                    "refreshed": result.get("refreshed", 0),
+                    "errors": result.get("errors", 0),
+                }
+            else:
+                return {"ok": False, "status": resp.status_code, "detail": resp.text[:200]}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:200]}

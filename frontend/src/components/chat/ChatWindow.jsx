@@ -18,7 +18,7 @@ export default function ChatWindow({ sessionId }) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 py-4 border-b border-white/70 bg-white/70 backdrop-blur-xl">
+      <div className="px-6 py-4 border-b border-white/70 dark:border-gray-800/60 bg-white/70 dark:bg-gray-950/70 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-indigo-500/15 flex items-center justify-center">
@@ -29,7 +29,7 @@ export default function ChatWindow({ sessionId }) {
               <p className="text-xs text-muted-foreground">Ask anything about admissions</p>
             </div>
           </div>
-          <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">Online</span>
+          <span className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-full">Online</span>
         </div>
       </div>
 
@@ -53,7 +53,7 @@ export default function ChatWindow({ sessionId }) {
         )}
       </ScrollArea>
 
-      <div className="border-t border-white/70 bg-white/70 backdrop-blur-xl p-4">
+      <div className="border-t border-white/70 dark:border-gray-800/60 bg-white/70 dark:bg-gray-950/70 backdrop-blur-xl p-4">
         <div className="max-w-3xl mx-auto">
           <ChatInput onSend={sendMessage} disabled={isTyping} sessionId={sessionId} />
         </div>

@@ -51,7 +51,7 @@ export default function GuidancePage() {
       {/* Progress */}
       <div className="flex items-center gap-2 mb-8">
         {[1, 2].map(s => (
-          <div key={s} className={`flex-1 h-1.5 rounded-full transition-colors ${step > s ? 'bg-indigo-500' : step === s ? 'bg-indigo-400/60' : 'bg-white/70'}`} />
+          <div key={s} className={`flex-1 h-1.5 rounded-full transition-colors ${step > s ? 'bg-indigo-500' : step === s ? 'bg-indigo-400/60' : 'bg-muted'}`} />
         ))}
       </div>
 
@@ -76,7 +76,7 @@ export default function GuidancePage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>Course Interest</Label>
-                    <select className="w-full h-11 rounded-xl border border-input/70 bg-white/70 backdrop-blur px-3 text-sm" value={form.course} onChange={e => set('course', e.target.value)}>
+                    <select className="w-full h-11 rounded-xl border border-input/70 bg-white/70 dark:bg-gray-900/70 backdrop-blur px-3 text-sm" value={form.course} onChange={e => set('course', e.target.value)}>
                       <option value="">Select course</option>
                       {COURSES.map(c => <option key={c}>{c}</option>)}
                     </select>
@@ -99,7 +99,7 @@ export default function GuidancePage() {
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label>Preferred State</Label>
-                      <select className="w-full h-11 rounded-xl border border-input/70 bg-white/70 backdrop-blur px-3 text-sm" value={form.state} onChange={e => set('state', e.target.value)}>
+                      <select className="w-full h-11 rounded-xl border border-input/70 bg-white/70 dark:bg-gray-900/70 backdrop-blur px-3 text-sm" value={form.state} onChange={e => set('state', e.target.value)}>
                         <option value="">Any state</option>
                         {STATES.map(s => <option key={s}>{s}</option>)}
                       </select>

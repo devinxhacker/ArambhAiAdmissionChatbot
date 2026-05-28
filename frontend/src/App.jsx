@@ -13,6 +13,7 @@ import DashboardLayout from '@/layouts/DashboardLayout'
 import ProtectedRoute  from '@/components/auth/ProtectedRoute'
 import AdminRoute      from '@/components/auth/AdminRoute'
 import SuperAdminRoute from '@/components/auth/SuperAdminRoute'
+import SessionTimeoutAlert from '@/components/auth/SessionTimeoutAlert'
 
 // ── Auth pages ────────────────────────────────────────────────────────────────
 import LoginPage          from '@/pages/LoginPage'
@@ -47,6 +48,7 @@ import AdminsPage          from '@/pages/superadmin/AdminsPage'
 import CollegesManagePage  from '@/pages/superadmin/CollegesManagePage'
 import UsersPage           from '@/pages/superadmin/UsersPage'
 import AnalyticsPage       from '@/pages/superadmin/AnalyticsPage'
+import CrawlDataPage       from '@/pages/superadmin/CrawlDataPage'
 
 import { Toaster } from '@/components/ui/toaster'
 
@@ -136,6 +138,7 @@ export default function App() {
               <Route path="/superadmin/colleges"   element={<CollegesManagePage />} />
               <Route path="/superadmin/admins"     element={<AdminsPage />} />
               <Route path="/superadmin/users"      element={<UsersPage />} />
+              <Route path="/superadmin/crawl-data" element={<CrawlDataPage />} />
               <Route path="/superadmin/analytics"  element={<AnalyticsPage />} />
             </Route>
           </Route>
@@ -144,6 +147,7 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <Toaster />
+      <SessionTimeoutAlert />
     </>
   )
 }
