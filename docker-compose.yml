@@ -135,11 +135,26 @@ services:
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
       VITE_AI_BASE_URL: ${VITE_AI_BASE_URL}
+      VITE_TTS_BASE_URL: ${VITE_TTS_BASE_URL:-http://localhost:8200}
     ports: ["5173:5173"]
     volumes:
       - ./frontend:/app
       - /app/node_modules
     command: npm run dev -- --host 0.0.0.0
+
+  # ───────────────────────── TTS Service (Piper) ─────────────────────────
+  tts:
+    build:
+      context: ./tts-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports: ["8200:8200"]
+    volumes:
+      - ./tts-service:/app
+      - ./data/tts-models:/app/models
+    environment:
+      PYTHONUNBUFFERED: "1"
+    command: uvicorn main:app --host 0.0.0.0 --port 8200
 
   # ───────────────────────── Observability ─────────────────────────
   prometheus:

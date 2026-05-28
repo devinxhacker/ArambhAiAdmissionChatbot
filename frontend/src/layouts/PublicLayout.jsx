@@ -1,17 +1,26 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { GraduationCap, Menu, X, Moon, Sun, Sparkles, ArrowRight } from 'lucide-react'
+import { GraduationCap, Menu, X, Moon, Sun, Sparkles, ArrowRight, Globe } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useThemeStore } from '@/store/themeStore'
+import { useLanguageStore } from '@/store/languageStore'
 import { Button } from '@/components/ui/button'
 import { Outlet } from 'react-router-dom'
 import { motion, useScroll, useSpring } from 'framer-motion'
 import { useLenis } from '@/hooks/useLenis'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 export default function PublicLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { isAuthenticated, user } = useAuthStore()
   const { theme, setTheme } = useThemeStore()
+  const { language, setLanguage, languages } = useLanguageStore()
   const navigate = useNavigate()
   useLenis()
 
@@ -55,6 +64,28 @@ export default function PublicLayout() {
             </div>
 
             <div className="hidden md:flex items-center gap-2">
+              {/* Language Selector */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" title="Language">
+                    <Globe className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <ScrollArea className="max-h-72">
+                    {languages.map((lang) => (
+                      <DropdownMenuItem
+                        key={lang.code}
+                        onClick={() => setLanguage(lang.code)}
+                        className={language === lang.code ? 'bg-accent font-medium' : ''}
+                      >
+                        <span className="notranslate">{lang.nativeLabel}</span>
+                        <span className="text-xs text-muted-foreground ml-auto notranslate">{lang.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </ScrollArea>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>

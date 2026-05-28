@@ -2,6 +2,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pydantic import BaseModel
 
 from ..core.database import get_db
 from ..core.deps import current_user
@@ -65,6 +66,20 @@ async def delete_conversation(conv_id: str, user: dict = Depends(current_user), 
     repo = ConversationRepo(db)
     n = await repo.delete(conv_id, user["_id"])
     return {"deleted": n}
+
+
+class RenameBody(BaseModel):
+    title: str
+
+
+@router.patch("/{conv_id}/title")
+async def rename_conversation(conv_id: str, body: RenameBody, user: dict = Depends(current_user), db: AsyncIOMotorDatabase = Depends(get_db)):
+    repo = ConversationRepo(db)
+    conv = await repo.get_conversation(conv_id, user["_id"])
+    if not conv:
+        raise HTTPException(404, "conversation not found")
+    await repo.update_title(conv_id, body.title.strip()[:100])
+    return {"ok": True, "title": body.title.strip()[:100]}
 
 
 @router.post("/{conv_id}/ask")

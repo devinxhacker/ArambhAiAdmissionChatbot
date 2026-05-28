@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useThemeStore } from '@/store/themeStore'
 import { useAuthStore } from '@/store/authStore'
+import TranslateProvider from '@/components/common/TranslateProvider'
 
 // ── Layouts ───────────────────────────────────────────────────────────────────
 import PublicLayout   from '@/layouts/PublicLayout'
@@ -86,7 +87,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <TranslateProvider>
       <Routes>
 
         {/* ── Public routes (with navbar + footer) ── */}
@@ -148,6 +149,6 @@ export default function App() {
       </Routes>
       <Toaster />
       <SessionTimeoutAlert />
-    </>
+    </TranslateProvider>
   )
 }

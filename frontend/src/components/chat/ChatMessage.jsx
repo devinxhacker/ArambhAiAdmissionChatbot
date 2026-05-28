@@ -4,9 +4,11 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import { Bot, User, ExternalLink, Copy, Check, ChevronDown, FileText } from 'lucide-react'
+import { Bot, User, ExternalLink, Copy, Check, ChevronDown, FileText, Volume2, VolumeX } from 'lucide-react'
 import { format } from 'date-fns'
 import { useState } from 'react'
+import { useTextToSpeech } from '@/hooks/useTextToSpeech'
+import { useLanguageStore } from '@/store/languageStore'
 
 function CopyButton({ text }) {
   const [copied, setCopied] = useState(false)
@@ -99,6 +101,83 @@ function SourcesDropdown({ sources }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function MessageActions({ content }) {
+  const { isSpeaking, isSupported, toggle, speak, stop } = useTextToSpeech()
+  const [copied, setCopied] = useState(false)
+  const [isTranslatingForTTS, setIsTranslatingForTTS] = useState(false)
+  const { language } = useLanguageStore()
+
+  // Strip markdown for TTS (read plain text)
+  const plainText = content
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[|─┌┐└┘├┤┬┴┼]/g, '')
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ' ')
+    .trim()
+
+  const handleSpeak = async () => {
+    if (isSpeaking) {
+      stop()
+      return
+    }
+
+    // If language is not English, translate the text first then speak
+    if (language !== 'en') {
+      setIsTranslatingForTTS(true)
+      try {
+        const { translateText } = await import('@/lib/translate')
+        const translated = await translateText(plainText, language)
+        speak(translated || plainText)
+      } catch {
+        // Fallback: speak original text
+        speak(plainText)
+      }
+      setIsTranslatingForTTS(false)
+    } else {
+      speak(plainText)
+    }
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-center gap-1 px-1">
+      {/* Text-to-Speech */}
+      {isSupported && (
+        <button
+          onClick={handleSpeak}
+          disabled={isTranslatingForTTS}
+          className={cn(
+            "p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-gray-800/50 transition-colors",
+            isSpeaking && "text-primary bg-primary/10",
+            isTranslatingForTTS && "opacity-50 cursor-wait"
+          )}
+          title={isSpeaking ? 'Stop speaking' : isTranslatingForTTS ? 'Translating...' : 'Read aloud'}
+        >
+          {isSpeaking ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+        </button>
+      )}
+
+      {/* Copy message */}
+      <button
+        onClick={handleCopy}
+        className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 dark:hover:bg-gray-800/50 transition-colors"
+        title={copied ? 'Copied!' : 'Copy message'}
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
     </div>
   )
 }
@@ -226,6 +305,11 @@ export default function ChatMessage({ message }) {
             </ReactMarkdown>
           )}
         </div>
+
+        {/* Action buttons for AI messages (TTS + Copy) */}
+        {!isUser && message.content && (
+          <MessageActions content={message.content} />
+        )}
 
         {/* Sources — collapsible dropdown */}
         {!isUser && message.sources && message.sources.length > 0 && (

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   Plus, MessageSquare, BarChart3, GraduationCap, ChevronLeft, ChevronRight,
-  Sparkles, Trash2,
+  Sparkles, Trash2, MoreHorizontal, Pencil,
 } from 'lucide-react'
 import ChatWindow from '@/components/chat/ChatWindow'
 import { useChatStore } from '@/store/chatStore'
@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+import { api } from '@/lib/api'
 
 // ─── Suggested prompts ────────────────────────────────────────────────────────
 const SUGGESTED = [
@@ -29,6 +30,7 @@ function ChatSidebar({ collapsed, onToggle }) {
   const { user } = useAuthStore()
   const navigate = useNavigate()
   const { sessionId } = useParams()
+  const [contextMenu, setContextMenu] = useState(null)
 
   useEffect(() => { loadSessions() }, [])
 
@@ -38,11 +40,22 @@ function ChatSidebar({ collapsed, onToggle }) {
   }
 
   const handleDelete = async (e, sid) => {
-    e.preventDefault()
-    e.stopPropagation()
+    if (e) { e.preventDefault(); e.stopPropagation() }
     await deleteSession(sid)
     if (sessionId === sid) {
       navigate('/chat', { replace: true })
+    }
+  }
+
+  const handleRename = async (e, sid) => {
+    if (e) { e.preventDefault(); e.stopPropagation() }
+    const currentTitle = sessions.find(s => s._id === sid)?.title || ''
+    const newTitle = prompt('Rename chat:', currentTitle)
+    if (newTitle && newTitle.trim() && newTitle !== currentTitle) {
+      try {
+        await api.patch(`/api/conversations/${sid}/title`, { title: newTitle.trim() })
+        loadSessions()
+      } catch { /* ignore */ }
     }
   }
 
@@ -58,7 +71,7 @@ function ChatSidebar({ collapsed, onToggle }) {
     <motion.aside
       animate={{ width: collapsed ? 64 : 260 }}
       transition={{ duration: 0.22, ease: 'easeInOut' }}
-      className="flex flex-col h-full bg-white/80 dark:bg-gray-950/80 border-r border-white/70 dark:border-gray-800/60 backdrop-blur-xl overflow-hidden shrink-0"
+      className="flex flex-col h-full bg-white/80 dark:bg-gray-950/80 border-r border-white/70 dark:border-gray-800/60 backdrop-blur-xl shrink-0 overflow-visible"
     >
       {/* Header */}
       <div className="flex items-center h-14 px-3 border-b border-white/70 dark:border-gray-800/60 shrink-0">
@@ -116,27 +129,74 @@ function ChatSidebar({ collapsed, onToggle }) {
               <p className="text-xs text-muted-foreground px-2 py-3">No conversations yet.</p>
             )}
             {sessions.map(session => (
-              <Link key={session._id} to={`/chat/${session._id}`}>
-                <div className={cn(
-                  'flex items-center gap-2 px-2 py-2 rounded-xl text-xs cursor-pointer transition-colors group',
+              <div
+                key={session._id}
+                className={cn(
+                  'flex items-center gap-2 px-2 py-2 rounded-xl text-xs cursor-pointer transition-colors',
                   sessionId === session._id
-                    ? 'bg-indigo-500/10 text-indigo-600 font-medium'
-                    : 'text-muted-foreground hover:bg-white/70 hover:text-foreground'
-                )}>
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate flex-1">{session.title || 'New chat'}</span>
-                  <button
-                    onClick={(e) => handleDelete(e, session._id)}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 hover:text-red-600 transition-all shrink-0"
-                    title="Delete chat"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              </Link>
+                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium'
+                    : 'text-muted-foreground hover:bg-white/10 hover:text-foreground'
+                )}
+                onClick={() => navigate(`/chat/${session._id}`)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setContextMenu({ x: e.clientX, y: e.clientY, sessionId: session._id })
+                }}
+              >
+                <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate flex-1">{session.title || 'New chat'}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setContextMenu({ x: e.clientX, y: e.clientY, sessionId: session._id })
+                  }}
+                  className="p-0.5 rounded hover:bg-white/20 shrink-0"
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </ScrollArea>
+      )}
+
+      {/* Context menu (portal-rendered) */}
+      {contextMenu && (
+        <div
+          className="fixed inset-0 z-[9999]"
+          onClick={() => setContextMenu(null)}
+        >
+          <div
+            className="absolute bg-popover border border-border rounded-lg shadow-lg py-1 w-40 z-[9999]"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent transition-colors text-left"
+              onClick={() => {
+                const sid = contextMenu.sessionId
+                setContextMenu(null)
+                const currentTitle = sessions.find(s => s._id === sid)?.title || ''
+                const newTitle = prompt('Rename chat:', currentTitle)
+                if (newTitle && newTitle.trim() && newTitle !== currentTitle) {
+                  api.patch(`/api/conversations/${sid}/title`, { title: newTitle.trim() }).then(() => loadSessions())
+                }
+              }}
+            >
+              <Pencil className="h-3 w-3" /> Rename
+            </button>
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-red-50 dark:hover:bg-red-950 text-red-600 transition-colors text-left"
+              onClick={() => {
+                const sid = contextMenu.sessionId
+                setContextMenu(null)
+                handleDelete(null, sid)
+              }}
+            >
+              <Trash2 className="h-3 w-3" /> Delete
+            </button>
+          </div>
+        </div>
       )}
 
       {/* User */}
