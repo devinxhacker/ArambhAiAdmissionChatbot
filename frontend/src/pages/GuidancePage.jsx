@@ -15,7 +15,7 @@ import {
 } from 'recharts'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { api, aiApi } from '@/lib/api'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -161,11 +161,11 @@ function StepAcademics({ form, set, onNext, onBack }) {
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">12th Marks / Percentage</Label>
-              <Input type="number" min="0" max="100" value={form.marks} onChange={e => set('marks', e.target.value)} placeholder="e.g. 85" className="h-12 rounded-xl" />
+              <Input type="text" inputMode="decimal" value={form.marks} onChange={e => set('marks', e.target.value)} placeholder="e.g. 85" className="h-12 rounded-xl" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Entrance Exam Percentile / Rank</Label>
-              <Input type="number" min="0" value={form.percentile} onChange={e => set('percentile', e.target.value)} placeholder="e.g. 92.5 or rank 15000" className="h-12 rounded-xl" />
+              <Input type="text" inputMode="decimal" value={form.percentile} onChange={e => set('percentile', e.target.value)} placeholder="e.g. 92.5 or rank 15000" className="h-12 rounded-xl" />
             </div>
           </div>
           <div className="space-y-1.5">
@@ -301,35 +301,15 @@ function StepGoals({ form, set, onSubmit, onBack, loading }) {
 
 // ─── Loading Animation ────────────────────────────────────────────────────────
 function AILoadingState() {
-  const steps = [
-    { icon: Brain, label: 'Analyzing your profile...' },
-    { icon: Target, label: 'Matching with colleges...' },
-    { icon: BarChart3, label: 'Generating insights...' },
-    { icon: Sparkles, label: 'Preparing your roadmap...' },
-  ]
-  const [activeStep, setActiveStep] = useState(0)
-  useEffect(() => {
-    const interval = setInterval(() => setActiveStep(s => (s + 1) % steps.length), 1500)
-    return () => clearInterval(interval)
-  }, [])
-
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center justify-center py-16 space-y-8">
-      <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-        className="h-20 w-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
-        <Brain className="h-10 w-10 text-white" />
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center justify-center py-12 space-y-6">
+      <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 1.5, repeat: Infinity }}
+        className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
+        <Brain className="h-8 w-8 text-white" />
       </motion.div>
-      <div className="space-y-3 text-center">
-        {steps.map((s, i) => {
-          const Icon = s.icon
-          return (
-            <motion.div key={i} initial={{ opacity: 0.3 }} animate={{ opacity: activeStep === i ? 1 : 0.3 }} className="flex items-center gap-3 justify-center">
-              <Icon className={`h-4 w-4 ${activeStep === i ? 'text-indigo-500' : 'text-muted-foreground'}`} />
-              <span className={`text-sm ${activeStep === i ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>{s.label}</span>
-              {activeStep > i && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-            </motion.div>
-          )
-        })}
+      <div className="text-center">
+        <p className="font-medium">Preparing your roadmap...</p>
+        <p className="text-sm text-muted-foreground mt-1">This will only take a moment</p>
       </div>
     </motion.div>
   )
@@ -485,13 +465,19 @@ function GuidanceChatbot({ form, colleges, aiInsights }) {
     setInput('')
     setIsTyping(true)
 
-    // Build history with context injected in first message
+    // Build history with context injected as assistant context (not in the search query)
     const history = messages.map(m => ({ role: m.role, content: m.content }))
-    const contextPrefix = history.length === 0
-      ? `[Context: ${buildContext()}]\n\nBased on the above student profile and recommendations, answer: `
-      : ''
 
-    const fullMessage = contextPrefix + content.trim()
+    // For the first message, inject context as a prior assistant message so the AI knows
+    // the student's profile, but the actual user query stays clean for web search
+    if (history.length === 0) {
+      history.push({
+        role: 'assistant',
+        content: `I have the following information about this student:\n${buildContext()}\n\nI'll use this context to answer their questions.`
+      })
+    }
+
+    const fullMessage = content.trim()
 
     try {
       const baseUrl = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:8100'
@@ -676,6 +662,11 @@ function GuidanceChatbot({ form, colleges, aiInsights }) {
 
 // ─── Helper: Generate "Why Recommended" reason for each college ───────────────
 function generateWhyRecommended(college, form, index) {
+  // If AI already provided reasons (from web search parsing), use those
+  if (college.whyReasons && college.whyReasons.length > 0) {
+    return college.whyReasons.slice(0, 4)
+  }
+
   const reasons = []
   if (form.state && (college.address?.state === form.state || college.state === form.state)) {
     reasons.push(`Located in your preferred state (${form.state})`)
@@ -695,7 +686,9 @@ function generateWhyRecommended(college, form, index) {
   if (form.budget && college.fees && college.fees <= form.budget) {
     reasons.push(`Within your budget (₹${(college.fees / 100000).toFixed(1)}L/year)`)
   }
-  // Fallback reasons based on position
+  if (college.source === 'web_search') {
+    reasons.push(`Found via real-time web search for best ${form.course} colleges`)
+  }
   if (reasons.length === 0) {
     const fallbacks = [
       `High match score based on your academic profile`,
@@ -705,7 +698,7 @@ function generateWhyRecommended(college, form, index) {
     ]
     reasons.push(fallbacks[index % fallbacks.length])
   }
-  return reasons.slice(0, 3)
+  return reasons.slice(0, 4)
 }
 
 // ─── Results Page ─────────────────────────────────────────────────────────────
@@ -818,13 +811,27 @@ function ResultsView({ form, results, aiInsights, aiDetailedSummary, onReset }) 
             )}
 
             {/* Detailed AI Summary */}
-            {aiDetailedSummary && (
+            {aiDetailedSummary ? (
               <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/40 p-4 bg-emerald-50/30 dark:bg-emerald-900/10">
                 <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2 flex items-center gap-1.5">
-                  <Lightbulb className="h-3.5 w-3.5" /> Detailed Guidance
+                  <Lightbulb className="h-3.5 w-3.5" /> AI Web Search Results
                 </p>
-                <div className="text-sm text-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none">
+                <div className="text-sm text-foreground leading-relaxed prose prose-sm dark:prose-invert max-w-none [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_th]:bg-muted/50 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:border [&_th]:border-border [&_td]:px-3 [&_td]:py-2 [&_td]:border [&_td]:border-border [&_tr:hover]:bg-muted/30 overflow-x-auto">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiDetailedSummary}</ReactMarkdown>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/40 p-4 bg-emerald-50/30 dark:bg-emerald-900/10">
+                <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2 flex items-center gap-1.5">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> AI is searching the web for personalized recommendations...
+                </p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex gap-1">
+                    <span className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span>Searching web, analyzing colleges, generating guidance</span>
                 </div>
               </div>
             )}
@@ -905,18 +912,28 @@ function ResultsView({ form, results, aiInsights, aiDetailedSummary, onReset }) 
 
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{college.name}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{college.address?.city || college.city}, {college.address?.state || college.state || form.state}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {[college.address?.city || college.city, college.address?.state || college.state || form.state].filter(Boolean).join(', ') || 'India'}
+                          </p>
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {college.ranking && <Badge variant="outline" className="text-[10px]">Rank #{college.ranking}</Badge>}
                             {college.accreditation && <Badge variant="secondary" className="text-[10px]">{college.accreditation}</Badge>}
+                            {college.fees && <Badge variant="outline" className="text-[10px]">₹{(college.fees / 100000).toFixed(1)}L/yr</Badge>}
+                            {college.source === 'web_search' && <Badge variant="warning" className="text-[10px]">🌐 Web</Badge>}
                             <Badge variant="success" className="text-[10px]">{college.matchScore}% Match</Badge>
                           </div>
                         </div>
 
                         <div className="flex flex-col gap-1.5 shrink-0">
-                          <Button size="sm" variant="outline" asChild>
-                            <Link to={`/colleges/${college.slug}`}>View <ChevronRight className="ml-1 h-3 w-3" /></Link>
-                          </Button>
+                          {college.slug && !college.slug.startsWith('ai-') ? (
+                            <Button size="sm" variant="outline" asChild>
+                              <Link to={`/colleges/${college.slug}`}>View <ChevronRight className="ml-1 h-3 w-3" /></Link>
+                            </Button>
+                          ) : college.source_url ? (
+                            <Button size="sm" variant="outline" asChild>
+                              <a href={college.source_url} target="_blank" rel="noopener noreferrer">Source <ChevronRight className="ml-1 h-3 w-3" /></a>
+                            </Button>
+                          ) : null}
                           <Button size="sm" variant="ghost" className="text-xs" onClick={() => setExpandedCollege(isExpanded ? null : i)}>
                             {isExpanded ? 'Hide' : 'Why?'} <Info className="ml-1 h-3 w-3" />
                           </Button>
@@ -972,6 +989,133 @@ function ResultsView({ form, results, aiInsights, aiDetailedSummary, onReset }) 
   )
 }
 
+// ─── Parse colleges from AI response text ─────────────────────────────────────
+
+function parseCollegesFromAI(aiText, form, citations = []) {
+  const colleges = []
+  if (!aiText) return colleges
+
+  // Try to extract numbered college entries from the AI response
+  // Pattern: "1. College Name" or "**1. College Name**" or "### 1. College Name"
+  const lines = aiText.split('\n')
+  let currentCollege = null
+  let currentReasons = []
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    // Match numbered college entries like "1. IIT Bombay" or "**1. IIT Bombay**"
+    const collegeMatch = trimmed.match(/^(?:\*\*)?(?:#{1,3}\s*)?(\d+)[.)]\s*\*?\*?(.+?)(?:\*\*)?$/i)
+    if (collegeMatch) {
+      // Save previous college
+      if (currentCollege) {
+        currentCollege.whyReasons = currentReasons.length > 0 ? currentReasons : [`Recommended for ${form.course}`]
+        colleges.push(currentCollege)
+      }
+
+      const name = collegeMatch[2]
+        .replace(/\*\*/g, '')
+        .replace(/\[.*?\]/g, '')
+        .replace(/\(.*?\)/g, '')
+        .replace(/[-–—:]/g, ' ')
+        .trim()
+        .split(/\s{2,}/)[0] // Take first part before double spaces
+        .trim()
+
+      if (name.length > 3 && name.length < 100) {
+        currentCollege = {
+          _id: `ai-${colleges.length}`,
+          name,
+          city: '',
+          state: form.state || '',
+          address: { city: '', state: form.state || '' },
+          slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          ranking: null,
+          accreditation: null,
+          fees: null,
+          source: 'web_search',
+        }
+        currentReasons = []
+      } else {
+        currentCollege = null
+        currentReasons = []
+      }
+      continue
+    }
+
+    // Collect reasons/details for current college
+    if (currentCollege && trimmed) {
+      // Extract city/state info
+      const locationMatch = trimmed.match(/(?:city|location|located|state)[:\s]*([^,\n]+)/i)
+      if (locationMatch) {
+        const loc = locationMatch[1].replace(/\*\*/g, '').trim()
+        if (loc.length < 40) {
+          currentCollege.address.city = loc
+          currentCollege.city = loc
+        }
+      }
+
+      // Extract state
+      const stateMatch = trimmed.match(/(?:state)[:\s]*([^,\n.]+)/i)
+      if (stateMatch) {
+        currentCollege.address.state = stateMatch[1].replace(/\*\*/g, '').trim()
+        currentCollege.state = stateMatch[1].replace(/\*\*/g, '').trim()
+      }
+
+      // Extract fees
+      const feesMatch = trimmed.match(/(?:fees?|cost|tuition)[:\s]*₹?\s*([\d,.]+)\s*(?:lakh|lac|L)/i)
+      if (feesMatch) {
+        currentCollege.fees = parseFloat(feesMatch[1].replace(/,/g, '')) * 100000
+      }
+
+      // Extract ranking
+      const rankMatch = trimmed.match(/(?:rank|ranking|nirf)[:\s#]*(\d+)/i)
+      if (rankMatch) {
+        currentCollege.ranking = parseInt(rankMatch[1])
+      }
+
+      // Extract accreditation
+      const accMatch = trimmed.match(/(NAAC\s*[A-Z+]+|NBA|AICTE|UGC)/i)
+      if (accMatch) {
+        currentCollege.accreditation = accMatch[1].toUpperCase()
+      }
+
+      // Collect bullet points as reasons
+      const bulletMatch = trimmed.match(/^[-•*]\s*(.+)/)
+      if (bulletMatch && bulletMatch[1].length > 10 && bulletMatch[1].length < 150) {
+        currentReasons.push(bulletMatch[1].replace(/\*\*/g, '').trim())
+      }
+
+      // Also collect "Why:" or "Reason:" lines
+      const whyMatch = trimmed.match(/^(?:why|reason|recommended because)[:\s]*(.+)/i)
+      if (whyMatch && whyMatch[1].length > 10) {
+        currentReasons.push(whyMatch[1].replace(/\*\*/g, '').trim())
+      }
+    }
+  }
+
+  // Don't forget the last college
+  if (currentCollege) {
+    currentCollege.whyReasons = currentReasons.length > 0 ? currentReasons : [`Recommended for ${form.course}`]
+    colleges.push(currentCollege)
+  }
+
+  // Add citation URLs to colleges if available
+  if (citations.length > 0) {
+    colleges.forEach((college, i) => {
+      const matchingCitation = citations.find(c =>
+        c.title?.toLowerCase().includes(college.name.toLowerCase().split(' ')[0]) ||
+        college.name.toLowerCase().includes(c.title?.toLowerCase().split(' ')[0] || '---')
+      )
+      if (matchingCitation) {
+        college.source_url = matchingCitation.source_url || matchingCitation.url
+      }
+    })
+  }
+
+  return colleges.slice(0, 8) // Cap at 8
+}
+
 // ─── Main Page Component ──────────────────────────────────────────────────────
 
 export default function GuidancePage() {
@@ -1000,133 +1144,144 @@ export default function GuidancePage() {
     setStep(nextStep)
   }
 
+  // Helper to stream from AI agent (used by background AI call & chatbot)
+  const streamFromAgent = async (message, history = []) => {
+    const baseUrl = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:8100'
+    const token = api.defaults.headers.common['Authorization']
+    const resp = await fetch(`${baseUrl}/agent/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: token } : {}) },
+      body: JSON.stringify({ message, history, language: 'en', stream: true }),
+    })
+    if (!resp.ok) throw new Error(`AI service error ${resp.status}`)
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let accumulated = ''
+    let citations = []
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      let nl = buf.indexOf('\n')
+      while (nl >= 0) {
+        const line = buf.slice(0, nl).trim()
+        buf = buf.slice(nl + 1)
+        if (line) {
+          try {
+            const parsed = JSON.parse(line)
+            if (parsed.type === 'token') accumulated += parsed.text || ''
+            if (parsed.type === 'citations') citations = parsed.citations || []
+          } catch { /* skip */ }
+        }
+        nl = buf.indexOf('\n')
+      }
+    }
+    return { text: accumulated, citations }
+  }
+
+  // ─── Static template-based guidance (INSTANT) ───────────────────────────────
+  const generateStaticGuidance = (form) => {
+    const marks = parseInt(form.marks) || 75
+    const budget = form.budget || 500000
+    const budgetLabel = `₹${(budget / 100000).toFixed(1)}L`
+
+    // Admission chance assessment
+    let chanceLevel, chanceText
+    if (marks >= 90) { chanceLevel = 'Excellent'; chanceText = 'You have a very strong profile. Top-tier colleges are within reach.' }
+    else if (marks >= 80) { chanceLevel = 'Good'; chanceText = 'You have a competitive profile. Focus on top 20-50 ranked colleges.' }
+    else if (marks >= 70) { chanceLevel = 'Moderate'; chanceText = 'You have decent chances at mid-tier colleges. Consider both private and government options.' }
+    else { chanceLevel = 'Fair'; chanceText = 'Focus on colleges with management quota or lower cutoffs. Consider lateral entry options.' }
+
+    // Priority-based tips
+    const tips = []
+    if ((form.priorities || []).includes('placements')) tips.push('Look for colleges with 80%+ placement rates and average packages above 5 LPA.')
+    if ((form.priorities || []).includes('ranking')) tips.push('Target NIRF top-100 colleges for better brand value and opportunities.')
+    if ((form.priorities || []).includes('fees')) tips.push('Government colleges offer the best value. Also check for fee waivers and scholarships.')
+    if ((form.priorities || []).includes('location')) tips.push(`Colleges in ${form.state || 'metro cities'} offer better industry connections and internship opportunities.`)
+    if ((form.priorities || []).includes('campus')) tips.push('Check for residential campuses with sports, clubs, and extracurricular facilities.')
+    if ((form.priorities || []).includes('research')) tips.push('Look for colleges with dedicated research labs, funded projects, and PhD programs.')
+    if (tips.length === 0) tips.push('Apply to a mix of reach, match, and safety colleges for the best outcome.')
+
+    // Timeline based on exam
+    const examTimelines = {
+      'JEE Main': 'Jan/Apr sessions → Results in Feb/May → JoSAA counselling Jun-Jul',
+      'JEE Advanced': 'May exam → Results Jun → JoSAA counselling Jul',
+      'MHT-CET': 'May exam → Results Jun → CAP rounds Jul-Sep',
+      'NEET': 'May exam → Results Jun → MCC counselling Jul-Sep',
+      'CAT': 'Nov exam → Results Jan → IIM calls Feb-Apr',
+      'GATE': 'Feb exam → Results Mar → CCMT counselling Jun-Jul',
+      'KCET': 'Apr exam → Results Jun → KEA counselling Jul-Aug',
+      'COMEDK': 'May exam → Results Jun → Counselling Jul',
+      'BITSAT': 'May-Jun exam → Iterations Jun-Jul',
+      'CLAT': 'Dec exam → Results Jan → Counselling Feb-Mar',
+    }
+    const timeline = examTimelines[form.entranceExam] || 'Check your exam authority website for exact dates'
+
+    return {
+      chanceLevel,
+      chanceText,
+      tips,
+      timeline,
+      budgetLabel,
+      marks,
+    }
+  }
+
   const handleSubmit = async () => {
     setLoading(true)
     addXp(35)
     setAchievements(a => [...a, 'ai_unlocked'])
     setStep(5)
 
+    // Generate static guidance INSTANTLY (no API call)
+    const staticGuidance = generateStaticGuidance(form)
+
+    // Build static insights immediately
+    let insights = `📊 **Admission Chances: ${staticGuidance.chanceLevel}**\n${staticGuidance.chanceText}\n\n`
+    insights += `📅 **Timeline:** ${staticGuidance.timeline}\n\n`
+    insights += `💡 **Tips for you:**\n${staticGuidance.tips.map(t => `• ${t}`).join('\n')}`
+    setAiInsights(insights)
+
+    // Try to fetch colleges from database FAST (this is quick)
+    let colleges = []
     try {
-      const payload = {
-        branch: form.course,
-        state: form.state || undefined,
-        rank: form.percentile ? parseInt(form.percentile) : undefined,
-        budget: form.budget || undefined,
-        needs_hostel: form.additionalNotes?.toLowerCase().includes('hostel') || false,
-        placement_min_lpa: (form.priorities || []).includes('placements') ? 5.0 : undefined,
-        language: 'en',
-      }
-
-      // Try AI recommendation
-      let aiResult = null
-      try {
-        const aiRes = await api.post('/api/recommend', payload)
-        aiResult = aiRes.data
-      } catch {
-        try {
-          const aiRes = await aiApi.post('/agent/recommend', payload)
-          aiResult = aiRes.data
-        } catch { /* ignore */ }
-      }
-
-      // Fetch colleges
       const params = { limit: 8 }
       if (form.state) params.state = form.state
       if (form.course) params.search = form.course
-      const collegeRes = await api.get('/api/colleges', { params })
-      const colleges = collegeRes.data.colleges || collegeRes.data || []
+      const res = await api.get('/api/colleges', { params })
+      colleges = res.data.colleges || res.data || []
+    } catch { /* ignore */ }
 
-      // Generate AI insights
-      let insights = ''
-      if (aiResult?.recommendations?.length) {
-        insights = `Based on your profile (${form.marks}% marks, ${form.entranceExam || 'general'} exam), here's what our AI found:\n\n`
-        insights += `✅ You're a strong candidate for ${form.course} programs.\n`
-        if (form.state) insights += `📍 ${form.state} has ${colleges.length}+ matching colleges.\n`
-        if (form.budget) insights += `💰 Your budget of ₹${(form.budget/100000).toFixed(1)}L/year covers most options.\n`
-        if ((form.priorities || []).includes('placements')) insights += `💼 Focus on colleges with 90%+ placement rates.\n`
-        if ((form.priorities || []).includes('ranking')) insights += `🏆 Top-ranked colleges in your range: consider applying early.\n`
-        insights += `\n📋 Recommended action: Apply to your top 5 matches and keep 2-3 safety options.`
-        if (aiResult.recommendations[0]?.reason) {
-          insights += `\n\n🤖 AI Note: ${aiResult.recommendations[0].reason}`
-        }
-      } else {
-        insights = `Based on your profile (${form.marks || 'N/A'}% marks, ${form.course}):\n\n`
-        insights += `✅ ${colleges.length} colleges match your criteria.\n`
-        insights += `📊 Your academic profile is competitive for this field.\n`
-        if (form.state) insights += `📍 Showing results for ${form.state}.\n`
-        insights += `\n💡 Tip: Use the chat below for detailed guidance on specific colleges, scholarships, and application strategies.`
-      }
-      setAiInsights(insights)
-
-      // Generate detailed AI summary via streaming call
-      try {
-        const summaryPrompt = `I am a student with the following profile:
-- Course: ${form.course}
-- 12th Marks: ${form.marks || 'Not provided'}%
-- Entrance Exam: ${form.entranceExam || 'Not specified'}, Percentile/Rank: ${form.percentile || 'Not provided'}
-- Preferred State: ${form.state || 'Any'}
-- Budget: ₹${form.budget ? (form.budget/100000).toFixed(1) + ' Lakhs/year' : 'Flexible'}
-- Priorities: ${(form.priorities || []).join(', ') || 'None specified'}
-- Additional: ${form.additionalNotes || 'None'}
-
-Based on this profile, provide a detailed admission guidance summary in 150-200 words covering:
-1. My admission chances assessment
-2. Key steps I should take right now
-3. Important deadlines to watch
-4. Scholarship opportunities I should explore
-5. One specific actionable tip
-
-Be specific and helpful. Use bullet points.`
-
-        const baseUrl = import.meta.env.VITE_AI_BASE_URL || 'http://localhost:8100'
-        const token = api.defaults.headers.common['Authorization']
-        const resp = await fetch(`${baseUrl}/agent/ask`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: token } : {}) },
-          body: JSON.stringify({ message: summaryPrompt, history: [], language: 'en', stream: true }),
-        })
-
-        if (resp.ok && resp.body) {
-          const reader = resp.body.getReader()
-          const decoder = new TextDecoder()
-          let buf = ''
-          let accumulated = ''
-          while (true) {
-            const { value, done } = await reader.read()
-            if (done) break
-            buf += decoder.decode(value, { stream: true })
-            let nl = buf.indexOf('\n')
-            while (nl >= 0) {
-              const line = buf.slice(0, nl).trim()
-              buf = buf.slice(nl + 1)
-              if (line) {
-                try {
-                  const parsed = JSON.parse(line)
-                  if (parsed.type === 'token') accumulated += parsed.text || ''
-                } catch { /* skip */ }
-              }
-              nl = buf.indexOf('\n')
-            }
-          }
-          if (accumulated) setAiDetailedSummary(accumulated)
-        }
-      } catch { /* detailed summary is optional */ }
-
-      setResults(colleges)
-      setStep(6)
-    } catch (err) {
-      console.error('Guidance error:', err)
-      setAiInsights('We encountered an issue fetching AI recommendations. Showing available colleges based on your filters. Use the chat below to ask specific questions.')
-      try {
-        const params = { limit: 8 }
-        if (form.state) params.state = form.state
-        if (form.course) params.search = form.course
-        const res = await api.get('/api/colleges', { params })
-        setResults(res.data.colleges || res.data || [])
-      } catch { setResults([]) }
-      setStep(6)
-    }
+    setResults(colleges)
+    setStep(6) // Show results page IMMEDIATELY
     setLoading(false)
+
+    // NOW fire AI in background for detailed web-search-based guidance
+    // User already sees results — AI enriches them when ready
+    setAiDetailedSummary('') // clear while loading
+    try {
+      // Use SHORT keyword-only query — sentences don't work with search engines
+      // But append format instruction so LLM structures the output well
+      const keywords = [form.course, 'colleges', form.state || 'India', form.entranceExam, 'fees placements cutoff 2024'].filter(Boolean).join(' ')
+      const query = `top ${keywords}. Present as a markdown table with columns: College Name, City, Fees (per year), Avg Package, MHT CET Cutoff, NIRF Rank. Then list key admission tips as bullet points.`
+
+      const { text: aiResponse } = await streamFromAgent(query)
+      if (aiResponse) {
+        setAiDetailedSummary(aiResponse)
+        // Try to parse colleges from AI and merge with existing
+        const aiColleges = parseCollegesFromAI(aiResponse, form, [])
+        if (aiColleges.length > 0) {
+          setResults(prev => {
+            const aiNames = new Set(aiColleges.map(c => c.name.toLowerCase()))
+            const uniqueDb = prev.filter(c => !aiNames.has((c.name || '').toLowerCase()))
+            return [...aiColleges, ...uniqueDb].slice(0, 10)
+          })
+        }
+      }
+    } catch (err) {
+      console.error('Background AI guidance error:', err)
+    }
   }
 
   const handleReset = () => {

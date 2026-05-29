@@ -45,8 +45,15 @@ def _normalise_link(base_url: str, href: str) -> Optional[str]:
         parsed = urlparse(full)
         if parsed.scheme not in ("http", "https"):
             return None
-        # Strip fragment, normalise
-        clean = parsed._replace(fragment="").geturl()
+        # Skip pagination, login, and query-heavy URLs
+        path = parsed.path.lower()
+        skip_patterns = ('/page/', '/login', '/logout', '/wp-admin', '/feed', '/comment', '/tag/', '/author/')
+        if any(p in path for p in skip_patterns):
+            return None
+        if 'page=' in (parsed.query or ''):
+            return None
+        # Strip fragment and query params for consistency
+        clean = parsed._replace(fragment="", query="").geturl()
         # Remove trailing slash for consistency (except root)
         if clean.endswith("/") and parsed.path != "/":
             clean = clean[:-1]
@@ -56,7 +63,7 @@ def _normalise_link(base_url: str, href: str) -> Optional[str]:
 
 
 def _is_skippable_url(url: str) -> bool:
-    """Skip non-content URLs (media, login, etc.)."""
+    """Skip non-content URLs (media, login, PDFs, etc.)."""
     path = urlparse(url).path.lower()
     skip_exts = {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".ico",
@@ -64,6 +71,7 @@ def _is_skippable_url(url: str) -> bool:
         ".zip", ".rar", ".7z", ".tar", ".gz",
         ".css", ".js", ".woff", ".woff2", ".ttf", ".eot", ".map",
         ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".pdf",  # Don't crawl PDFs — too slow
     }
     for ext in skip_exts:
         if path.endswith(ext):
@@ -72,6 +80,8 @@ def _is_skippable_url(url: str) -> bool:
         "/login", "/signin", "/signup", "/logout", "/wp-admin",
         "/wp-login", "/cart", "/checkout", "/account", "/api/",
         "/cgi-bin/", "/share", "/print", "javascript:", "mailto:",
+        "/feed", "/rss", "/sitemap", "/robots.txt",
+        "/notices", "/notice", "/circular",  # Skip notice/circular pages (pagination traps)
     )
     for pat in skip_patterns:
         if pat in url.lower():
@@ -102,8 +112,8 @@ def content_hash(text: str) -> str:
 
 async def _crawl4ai_recursive(
     seed_url: str,
-    max_depth: int = 10,
-    max_pages: int = 200,
+    max_depth: int = 2,
+    max_pages: int = 15,
 ) -> list[dict]:
     """
     Deep BFS crawl returning per-page results.
@@ -163,7 +173,7 @@ async def _crawl4ai_recursive(
     return pages
 
 
-def _run_crawl4ai_in_thread(url: str, max_depth: int = 10, max_pages: int = 200) -> list[dict]:
+def _run_crawl4ai_in_thread(url: str, max_depth: int = 2, max_pages: int = 15) -> list[dict]:
     """Run Crawl4AI in a dedicated thread with its own event loop."""
     async def _run():
         return await _crawl4ai_recursive(url, max_depth, max_pages)
@@ -176,7 +186,7 @@ def _run_crawl4ai_in_thread(url: str, max_depth: int = 10, max_pages: int = 200)
         finally:
             loop.close()
 
-    timeout = max(300, max_pages * 12)
+    timeout = max(90, max_pages * 8)
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(thread_target)
         return future.result(timeout=timeout)
@@ -186,7 +196,7 @@ def _run_crawl4ai_in_thread(url: str, max_depth: int = 10, max_pages: int = 200)
 # Fallback: BeautifulSoup — BFS with requests
 # ─────────────────────────────────────────────────────────────────
 
-def _bs4_deep_scrape(seed_url: str, max_depth: int = 10, max_pages: int = 200) -> list[dict]:
+def _bs4_deep_scrape(seed_url: str, max_depth: int = 2, max_pages: int = 15) -> list[dict]:
     """
     BFS crawl using requests + BeautifulSoup as fallback.
     Returns per-page results like Crawl4AI.
@@ -213,7 +223,7 @@ def _bs4_deep_scrape(seed_url: str, max_depth: int = 10, max_pages: int = 200) -
         visited.add(url)
 
         try:
-            resp = requests.get(url, headers=headers, timeout=25, allow_redirects=True)
+            resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
             resp.raise_for_status()
         except Exception as e:
             log.warning("bs4_page_failed", url=url, error=str(e)[:100])
@@ -276,9 +286,9 @@ def clean_scraped_text(raw: str) -> str:
 # Public entry-points
 # ─────────────────────────────────────────────────────────────────
 
-def scrape_url(url: str, max_depth: int = 10, max_pages: int = 200) -> str:
+def scrape_url(url: str, max_depth: int = 2, max_pages: int = 15) -> str:
     """
-    Scrape a URL recursively (deep BFS). Tries Crawl4AI first, falls back to BS4.
+    Scrape a URL recursively (BFS). Tries Crawl4AI first, falls back to BS4.
     Returns cleaned plain text (all pages concatenated) ready for chunking.
     """
     pages = scrape_url_pages(url, max_depth=max_depth, max_pages=max_pages)
@@ -286,7 +296,7 @@ def scrape_url(url: str, max_depth: int = 10, max_pages: int = 200) -> str:
     return clean_scraped_text(combined)
 
 
-def scrape_url_pages(url: str, max_depth: int = 10, max_pages: int = 200) -> list[dict]:
+def scrape_url_pages(url: str, max_depth: int = 2, max_pages: int = 15) -> list[dict]:
     """
     Scrape a URL recursively and return per-page results.
     Each result: {url, content, title, depth, content_hash}

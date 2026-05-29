@@ -174,15 +174,9 @@ async def add_website_url(
         "_id": str(ObjectId()),
         "url": body.get("url", ""),
         "label": body.get("label", ""),
-        "status": "scraping",
+        "status": "crawling",
         "chunks_indexed": 0,
         "pages_crawled": 0,
-        "max_depth": body.get("max_depth", 10),
-        "max_pages": body.get("max_pages", 200),
-        "auto_refresh": body.get("auto_refresh", True),
-        "refresh_interval_hours": body.get("refresh_interval_hours", 24),
-        "last_crawled_at": None,
-        "next_refresh_at": None,
         "created_at": datetime.now(timezone.utc),
     }
     await db.colleges.update_one(
@@ -190,44 +184,43 @@ async def add_website_url(
         {"$push": {"websiteUrls": url_doc}, "$set": {"updated_at": datetime.now(timezone.utc)}},
     )
 
-    # Trigger deep crawl in the background
+    # Trigger crawl in background — don't block the HTTP response
+    import asyncio
     import httpx
-    try:
-        ai_url = "http://ai-services:8100/ingest/crawl-url"
-        async with httpx.AsyncClient(timeout=600) as client:
-            resp = await client.post(ai_url, json={
-                "url": body.get("url", ""),
-                "entity_name": body.get("label") or college.get("name", ""),
-                "college": college.get("name", ""),
-                "max_depth": url_doc["max_depth"],
-                "max_pages": url_doc["max_pages"],
-            })
-            if resp.status_code == 200:
-                result = resp.json()
-                # Update the URL entry with success status and crawl stats
-                from datetime import timedelta
-                next_refresh = datetime.now(timezone.utc) + timedelta(hours=url_doc["refresh_interval_hours"])
-                await db.colleges.update_one(
-                    {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
-                    {"$set": {
-                        "websiteUrls.$.status": "completed",
-                        "websiteUrls.$.chunks_indexed": result.get("chunks_indexed", 0),
-                        "websiteUrls.$.pages_crawled": result.get("pages_crawled", 0),
-                        "websiteUrls.$.last_crawled_at": datetime.now(timezone.utc),
-                        "websiteUrls.$.next_refresh_at": next_refresh if url_doc["auto_refresh"] else None,
-                    }},
-                )
-            else:
-                await db.colleges.update_one(
-                    {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
-                    {"$set": {"websiteUrls.$.status": "failed"}},
-                )
-    except Exception as e:
-        # Don't fail the request — crawl happens best-effort
-        await db.colleges.update_one(
-            {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
-            {"$set": {"websiteUrls.$.status": "failed"}},
-        )
+
+    async def _background_crawl():
+        try:
+            ai_url = "http://ai-services:8100/ingest/crawl-url"
+            async with httpx.AsyncClient(timeout=180) as client:
+                resp = await client.post(ai_url, json={
+                    "url": body.get("url", ""),
+                    "entity_name": body.get("label") or college.get("name", ""),
+                    "college": college.get("name", ""),
+                    "max_depth": 2,
+                    "max_pages": 15,
+                })
+                if resp.status_code == 200:
+                    result = resp.json()
+                    await db.colleges.update_one(
+                        {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
+                        {"$set": {
+                            "websiteUrls.$.status": "completed",
+                            "websiteUrls.$.chunks_indexed": result.get("chunks_indexed", 0),
+                            "websiteUrls.$.pages_crawled": result.get("pages_crawled", 0),
+                        }},
+                    )
+                else:
+                    await db.colleges.update_one(
+                        {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
+                        {"$set": {"websiteUrls.$.status": "failed"}},
+                    )
+        except Exception:
+            await db.colleges.update_one(
+                {"_id": college["_id"], "websiteUrls._id": url_doc["_id"]},
+                {"$set": {"websiteUrls.$.status": "failed"}},
+            )
+
+    asyncio.create_task(_background_crawl())
 
     updated = await db.colleges.find_one({"_id": college["_id"]})
     return updated.get("websiteUrls", [])

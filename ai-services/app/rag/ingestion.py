@@ -68,33 +68,37 @@ async def ingest_raw_text(
     get_bm25().mark_stale()
 
     # mongo metadata
-    await db.documents.update_one(
-        {"doc_id": doc_id},
-        {
-            "$set": {
-                "doc_id": doc_id,
-                "title": metadata.get("title"),
-                "source_url": metadata.get("source_url"),
-                "source_type": metadata.get("source_type", "text"),
-                "metadata": {
-                    "college": metadata.get("college"),
-                    "state": metadata.get("state"),
-                    "category": metadata.get("category"),
-                    "year": metadata.get("year"),
-                    "language": metadata.get("language"),
-                    "tags": metadata.get("tags", []),
+    try:
+        await db.documents.update_one(
+            {"$or": [{"doc_id": doc_id}, {"hash": h}]},
+            {
+                "$set": {
+                    "doc_id": doc_id,
+                    "title": metadata.get("title"),
+                    "source_url": metadata.get("source_url"),
+                    "source_type": metadata.get("source_type", "text"),
+                    "metadata": {
+                        "college": metadata.get("college"),
+                        "state": metadata.get("state"),
+                        "category": metadata.get("category"),
+                        "year": metadata.get("year"),
+                        "language": metadata.get("language"),
+                        "tags": metadata.get("tags", []),
+                    },
+                    "chunk_count": n,
+                    "hash": h,
+                    "content_hash": metadata.get("content_hash", ""),
+                    "crawl_seed": metadata.get("crawl_seed"),
+                    "crawl_depth": metadata.get("crawl_depth"),
+                    "updated_at": datetime.now(timezone.utc),
                 },
-                "chunk_count": n,
-                "hash": h,
-                "content_hash": metadata.get("content_hash", ""),
-                "crawl_seed": metadata.get("crawl_seed"),
-                "crawl_depth": metadata.get("crawl_depth"),
-                "updated_at": datetime.now(timezone.utc),
+                "$setOnInsert": {"created_at": datetime.now(timezone.utc)},
             },
-            "$setOnInsert": {"created_at": datetime.now(timezone.utc)},
-        },
-        upsert=True,
-    )
+            upsert=True,
+        )
+    except Exception as exc:
+        # Duplicate key on hash means same content already indexed — that's fine
+        log.info("doc_meta_upsert_conflict", doc_id=doc_id, error=str(exc)[:80])
 
     log.info("ingested", doc_id=doc_id, chunks=n, title=metadata.get("title"))
     return {"ok": True, "doc_id": doc_id, "chunks": n}
