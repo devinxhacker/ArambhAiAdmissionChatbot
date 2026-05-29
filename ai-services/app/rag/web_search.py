@@ -411,12 +411,36 @@ async def _build_chunks(url: str, hit: dict, text: str, source_label: str) -> li
 
 
 async def _fetch_one_html(cli: httpx.AsyncClient, hit: dict, timeout: float) -> tuple[list[dict], list[str]]:
-    """Returns (html_chunks, pdf_links_to_follow)."""
+    """Returns (html_chunks, pdf_links_to_follow).
+    For PDFs: don't download/parse — just return metadata with the direct link."""
     url = hit["url"]
     cache_key = _cache_key("web_chunks", url)
     cached = await _cache_get(cache_key)
     if cached is not None:
-        return cached, []  # cached pages skip pdf-followup; PDFs are cached separately
+        return cached, []
+
+    # If URL looks like a PDF, don't download it — just create a metadata chunk with the link
+    if url.lower().split("?", 1)[0].endswith(".pdf"):
+        from os.path import basename
+        from urllib.parse import unquote
+        pdf_name = unquote(basename(urlparse(url).path)) or "Document"
+        host = urlparse(url).netloc.lower()
+        title = hit.get("title") or pdf_name
+        snippet = hit.get("snippet") or f"PDF document: {pdf_name}"
+        chunks = [{
+            "id": f"web::{hashlib.sha1(url.encode()).hexdigest()}::pdf::0",
+            "doc_id": f"web::{hashlib.sha1(url.encode()).hexdigest()}",
+            "text": f"{title}\n\nThis is a PDF document available at: {url}\n\n{snippet}",
+            "title": title,
+            "source_url": url,
+            "source_type": "web",
+            "snippet": snippet,
+            "host": host,
+            "chunk_index": 0,
+            "format": "pdf",
+        }]
+        await _cache_set(cache_key, chunks, ttl=3600)
+        return chunks, []
 
     try:
         body, ctype = await _fetch_html_bytes(cli, url, timeout)
@@ -427,14 +451,26 @@ async def _fetch_one_html(cli: httpx.AsyncClient, hit: dict, timeout: float) -> 
     if not body:
         return [], []
 
+    # If response is actually a PDF (content-type check), don't parse — return link
     if _looks_like_pdf(url, ctype):
-        try:
-            text = await asyncio.to_thread(_pdf_text_from_bytes, body[:_MAX_PDF_BYTES])
-        except Exception:
-            text = ""
-        if not _is_useful_pdf_text(text):
-            return [], []
-        chunks = await _build_chunks(url, hit, text, "pdf")
+        from os.path import basename
+        from urllib.parse import unquote
+        pdf_name = unquote(basename(urlparse(url).path)) or "Document"
+        host = urlparse(url).netloc.lower()
+        title = hit.get("title") or pdf_name
+        snippet = hit.get("snippet") or f"PDF document: {pdf_name}"
+        chunks = [{
+            "id": f"web::{hashlib.sha1(url.encode()).hexdigest()}::pdf::0",
+            "doc_id": f"web::{hashlib.sha1(url.encode()).hexdigest()}",
+            "text": f"{title}\n\nThis is a PDF document available at: {url}\n\n{snippet}",
+            "title": title,
+            "source_url": url,
+            "source_type": "web",
+            "snippet": snippet,
+            "host": host,
+            "chunk_index": 0,
+            "format": "pdf",
+        }]
         await _cache_set(cache_key, chunks, ttl=3600)
         return chunks, []
 
@@ -449,6 +485,7 @@ async def _fetch_one_html(cli: httpx.AsyncClient, hit: dict, timeout: float) -> 
     else:
         chunks = await _build_chunks(url, hit, text, "html")
 
+    # Collect PDF links but don't follow them — just note them
     pdf_links = await asyncio.to_thread(_harvest_pdf_links, url, html) if html else []
     if chunks:
         await _cache_set(cache_key, chunks, ttl=3600)
@@ -561,39 +598,35 @@ async def live_web_chunks(query: str, k: int | None = None) -> list[dict]:
 
     log.info("web_search_hits", n=len(hits), query=q)
 
-    # Fast mode: when k <= 3, only fetch top 2 pages and skip PDF follow-up.
-    # This keeps latency under 4s for the common autonomous-search case.
-    fast_mode = k <= 3
-    max_fetch = min(len(hits), 2 if fast_mode else len(hits))
-    follow_pdfs = (not fast_mode) and s.live_search_follow_pdfs
-    timeout = 6.0 if fast_mode else s.live_search_fetch_timeout
+    # Always use fast mode: fetch max 3 pages, never follow PDFs, short timeout.
+    # Use search snippets as lightweight grounding for remaining hits.
+    max_fetch = min(len(hits), 3)
+    timeout = 6.0
 
     chunks = await fetch_and_chunk(
         hits[:max_fetch],
-        follow_pdfs=follow_pdfs,
+        follow_pdfs=False,
         max_concurrent=4,
         timeout=timeout,
     )
 
-    # In fast mode, also use search snippets as lightweight chunks so we have
-    # grounding even if page fetches fail (rate-limited, blocked, etc.)
-    if fast_mode:
-        for hit in hits:
-            snippet = hit.get("snippet", "").strip()
-            if snippet and len(snippet) > 50:
-                host = urlparse(hit["url"]).netloc.lower()
-                chunks.append({
-                    "id": f"web::snippet::{hashlib.sha1(hit['url'].encode()).hexdigest()}",
-                    "doc_id": f"web::snippet::{hashlib.sha1(hit['url'].encode()).hexdigest()}",
-                    "text": snippet,
-                    "title": hit.get("title") or host,
-                    "source_url": hit["url"],
-                    "source_type": "web",
-                    "snippet": snippet,
-                    "host": host,
-                    "chunk_index": 0,
-                    "format": "snippet",
-                })
+    # Also use search snippets as lightweight chunks for ALL hits (fast grounding)
+    for hit in hits:
+        snippet = hit.get("snippet", "").strip()
+        if snippet and len(snippet) > 40:
+            host = urlparse(hit["url"]).netloc.lower()
+            chunks.append({
+                "id": f"web::snippet::{hashlib.sha1(hit['url'].encode()).hexdigest()}",
+                "doc_id": f"web::snippet::{hashlib.sha1(hit['url'].encode()).hexdigest()}",
+                "text": snippet,
+                "title": hit.get("title") or host,
+                "source_url": hit["url"],
+                "source_type": "web",
+                "snippet": snippet,
+                "host": host,
+                "chunk_index": 0,
+                "format": "snippet",
+            })
 
     log.info("web_chunks_extracted", chunks=len(chunks))
     return chunks

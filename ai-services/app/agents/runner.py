@@ -40,7 +40,11 @@ async def _resolve_query(user_message: str, history: list[dict]) -> str:
 
     lowered = user_message.lower().strip()
 
-    # Detect if the message needs resolution (pronouns, references, bare names, short follow-ups)
+    # Skip resolution for long, self-contained queries (they likely don't need context)
+    if len(lowered.split()) > 10:
+        return user_message
+
+    # Detect if the message needs resolution (pronouns, references, short follow-ups)
     needs_resolution = (
         len(lowered.split()) <= 6  # short messages often need context
         or any(w in lowered for w in (
@@ -53,14 +57,14 @@ async def _resolve_query(user_message: str, history: list[dict]) -> str:
             "the same", "same one", "that one", "this one",
             "also", "and what", "how about",
         ))
-        or any(w in lowered for w in ("who", "what", "when", "where", "how", "which"))
-        and len(lowered.split()) <= 8
+        or (any(w in lowered for w in ("who", "what", "when", "where", "how", "which"))
+            and len(lowered.split()) <= 8)
     )
     if not needs_resolution:
         return user_message
 
-    recent = history[-6:]
-    ctx = "\n".join(f"{m['role']}: {m['content'][:250]}" for m in recent)
+    recent = history[-4:]  # Only last 4 turns for speed
+    ctx = "\n".join(f"{m['role']}: {m['content'][:150]}" for m in recent)
 
     prompt = (
         f"Conversation so far:\n{ctx}\n\n"
@@ -165,28 +169,36 @@ async def run_streaming(
         yield {"type": "done"}
         return
 
-    # 2) Resolve coreferences using conversation history
-    resolved_query = await _resolve_query(user_message, history)
-    state["working_query"] = resolved_query if resolved_query != user_message else state["working_query"]
-
-    # 3) PARALLEL: run local retrieval + web search simultaneously
+    # 2) Resolve coreferences + search IN PARALLEL for speed
+    # Local retrieval starts immediately with the working_query from query_understanding.
+    # Coreference resolution runs in parallel — its result is used for web search.
     yield {"type": "status", "step": "searching"}
 
     async def _local():
         return await retrieval(state)
 
-    async def _web():
-        # Always attempt web search in parallel — we'll merge results
+    async def _resolve():
+        return await _resolve_query(user_message, history)
+
+    async def _web(query):
         from ..rag.web_search import live_web_chunks
         try:
-            chunks = await live_web_chunks(state["working_query"], k=s.live_search_top_k)
+            chunks = await live_web_chunks(query, k=s.live_search_top_k)
             return chunks or []
         except Exception as exc:
             log.info("parallel_web_failed", error=str(exc)[:80])
             return []
 
+    # Start local retrieval immediately (doesn't need resolved query — uses working_query from step 1)
     local_task = asyncio.create_task(_local())
-    web_task = asyncio.create_task(_web())
+    resolve_task = asyncio.create_task(_resolve())
+
+    # Wait for resolution first (fast — single LLM call), then start web search with resolved query
+    resolved_query = await resolve_task
+    search_query = resolved_query if resolved_query != user_message else state["working_query"]
+    state["working_query"] = search_query
+
+    web_task = asyncio.create_task(_web(search_query))
 
     local_result = await local_task
     state.update(local_result)

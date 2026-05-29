@@ -166,12 +166,16 @@ export const useChatStore = create((set, get) => ({
             try {
               const parsed = JSON.parse(line)
               switch (parsed.type) {
+                case 'status':
+                  patchAssistant((m) => ({ ...m, status: parsed.step }))
+                  break
                 case 'token':
                   accumulated += parsed.text || ''
                   patchAssistant((m) => ({
                     ...m,
                     content: accumulated,
                     pending: false,
+                    status: null,
                   }))
                   break
                 case 'citations':

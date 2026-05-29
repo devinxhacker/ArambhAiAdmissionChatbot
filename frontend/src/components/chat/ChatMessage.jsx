@@ -221,6 +221,21 @@ export default function ChatMessage({ message }) {
         >
           {isUser ? (
             <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+          ) : message.pending && !message.content ? (
+            <div className="flex items-center gap-2 py-1">
+              <span className="h-2 w-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <span className="h-2 w-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <span className="h-2 w-2 bg-indigo-400 rounded-full animate-bounce" />
+              {message.status && (
+                <span className="text-[11px] text-muted-foreground ml-2 animate-pulse">
+                  {message.status === 'understanding' && '🧠 Understanding your question...'}
+                  {message.status === 'searching' && '🔍 Searching knowledge base & web...'}
+                  {message.status === 'retrieving' && '📚 Retrieving relevant information...'}
+                  {message.status === 'web_search' && '🌐 Searching the web...'}
+                  {message.status === 'generating' && '✍️ Writing response...'}
+                </span>
+              )}
+            </div>
           ) : (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -312,7 +327,7 @@ export default function ChatMessage({ message }) {
         )}
 
         {/* Sources — collapsible dropdown */}
-        {!isUser && message.sources && message.sources.length > 0 && (
+        {!isUser && !message.pending && message.sources && message.sources.length > 0 && (
           <SourcesDropdown sources={message.sources} />
         )}
 

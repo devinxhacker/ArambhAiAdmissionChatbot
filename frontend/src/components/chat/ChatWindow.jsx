@@ -47,7 +47,6 @@ export default function ChatWindow({ sessionId }) {
             {messages.map((msg) => (
               <ChatMessage key={msg._id || msg.tempId} message={msg} />
             ))}
-            {isTyping && <TypingIndicator />}
             <div ref={bottomRef} />
           </div>
         )}
